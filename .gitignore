@@ -1,0 +1,17 @@
+# Editor / OS
+.DS_Store
+Thumbs.db
+
+# Python
+__pycache__/
+*.py[cod]
+
+# Claude Code local settings
+.claude/
+
+# Local archive of old versions + sample GIFs (not part of the app)
+archive/
+
+# Runtime-exported animations
+/animation.gif
+/vectorspin.gif
