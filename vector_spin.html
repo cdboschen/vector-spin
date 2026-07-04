@@ -669,6 +669,56 @@ function drawIqPlot(){
   ctx.restore();
 }
 
+function roundRectPath(x, y, w, h, r){
+  r = Math.min(r, w/2, h/2);
+  ctx.moveTo(x+r, y);
+  ctx.arcTo(x+w, y,   x+w, y+h, r);
+  ctx.arcTo(x+w, y+h, x,   y+h, r);
+  ctx.arcTo(x,   y+h, x,   y,   r);
+  ctx.arcTo(x,   y,   x+w, y,   r);
+  ctx.closePath();
+}
+
+// Subtle group box around the three plots currently being transformed: the IQ
+// plot plus its source-domain mag/phase pair (left column in Time mode, right
+// column in Freq mode). Its edge reaches the red DFT arrow, so the box reads as
+// "these three -> (arrow) -> the other domain". Drawn behind the plots as a very
+// light shade + faint border; excludes the shift controls below the plots.
+function drawGroupBox(){
+  const m = MARGIN;
+  // IQ inner square horizontal extent (mirrors makeMapper's equal-aspect math)
+  const iqInW = iqDrawRect.w - m.left - m.right;
+  const iqInH = iqDrawRect.h - m.top - m.bottom;
+  const iqSide = Math.min(iqInW, iqInH);
+  const iqIx    = iqDrawRect.x + m.left + (iqInW - iqSide)/2;
+  const iqRight = iqIx + iqSide;
+  // vertical span: top of the mag/IQ plots to bottom of the phase plots, padded
+  // to clear titles and x-axis labels without crowding them
+  const top = iqSqTop - 6;
+  const bot = iqSqTop + iqSquare + 6;
+  let bx1, bx2;
+  if(vs.iq_mode === 'freq'){
+    // source = right (freq) column; arrow is left of IQ (points toward time)
+    const tmRight = rects.time_mag.x + rects.time_mag.w - m.right;
+    const c = (tmRight + (iqIx - 42)) / 2;   // arrow centre (see drawArrow)
+    bx1 = c + 18;                            // arrow's IQ-side end (LEN/2)
+    bx2 = CW - PAD + 2;                      // enclose the freq column
+  } else {
+    // source = left (time) column; arrow is right of IQ (points toward freq)
+    bx1 = PAD - 2;                           // enclose the time column
+    bx2 = iqRight + 14;                      // GAP: meet the arrow's tail
+  }
+  ctx.save();
+  ctx.beginPath();
+  roundRectPath(bx1, top, bx2 - bx1, bot - top, 8);
+  ctx.fillStyle   = 'rgba(31,79,216,0.05)';   // very light blue wash
+  ctx.fill();
+  ctx.lineWidth   = 1;
+  ctx.strokeStyle = 'rgba(31,79,216,0.35)';   // slightly darker blue border
+  ctx.stroke();
+  ctx.restore();
+}
+
 function drawArrow(){
   // red DFT-direction arrow between IQ and the target column; '/N' label when dividing.
   // ~2x larger than before, kept clear of the IQ plot axis with a fixed gap.
@@ -715,6 +765,7 @@ function drawArrow(){
 function render(){
   ctx.clearRect(0,0,CW,CH);
   ctx.fillStyle = '#fff'; ctx.fillRect(0,0,CW,CH);
+  drawGroupBox();   // subtle shade behind the plots being transformed
 
   if(!PD){
     // empty axes
