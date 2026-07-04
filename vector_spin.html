@@ -830,7 +830,12 @@ function render(){
   const iq = mappers.iq;
   clip(iq);
   drawLine(iq, anim.chainX, anim.chainY, vs.phasor_color, 2.8);   // phasor shafts match stem width
-  drawDots(iq, anim.chainX, anim.chainY, vs.phasor_color, 3.15);  // green dots match marker dots (6.3/2)
+  // Colour the phasor-tip dots by the domain they came from: the impulses driving
+  // the phasors live in the conjugate domain (freq when the IQ plot shows Time, and
+  // vice-versa), so tips are red in Time mode / blue in Freq mode. Origin stays green.
+  const tipColor = (vs.iq_mode==='time') ? vs.fmarker[0] : vs.tmarker[0];
+  drawDots(iq, anim.chainX.slice(1), anim.chainY.slice(1), tipColor, 3.15);  // tips: source-domain colour
+  if(anim.chainX.length) drawDots(iq, [anim.chainX[0]], [anim.chainY[0]], vs.phasor_color, 3.15);  // origin stays green
   drawDots(iq, anim.histX, anim.histY, vs.history_color, 1.4);
   unclip();
 
