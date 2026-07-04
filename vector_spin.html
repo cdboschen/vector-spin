@@ -74,7 +74,8 @@
     .vs-iqmode-col{flex-wrap:wrap;}
     .vs-row{gap:10px 16px;}
     #vs-input{min-width:0; width:100%;}       /* was min-width:260px -> horizontal overflow */
-    .vs-field{flex-wrap:wrap; min-width:0 !important;} /* beat inline min-width:280px */
+    .vs-field{flex-wrap:wrap; min-width:0 !important;
+      margin-left:0 !important;}              /* don't right-push Start/Stop+Clear; left-align w/ Download GIF */
     .vs-slider{flex:1 1 140px;}
     .vs-slider input{width:100%;}             /* was fixed 150px */
   }
