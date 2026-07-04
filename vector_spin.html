@@ -28,7 +28,7 @@
   .vs-row{display:flex; flex-wrap:wrap; gap:14px 22px; align-items:center; margin:8px 0;}
   .vs-field{display:flex; align-items:center; gap:8px;}
   .vs-field label{font-size:13px; white-space:nowrap;}
-  .vs-desc{font-size:12px; color:#666; margin:2px 0 6px;}
+  .vs-desc{font-size:12px; color:#666; margin:2px 0 6px; white-space:pre-line;}
   #vs-input{
     font-family:ui-monospace,Consolas,Menlo,monospace; font-size:14px;
     padding:6px 8px; border:1px solid var(--border); border-radius:4px;
@@ -75,9 +75,14 @@
     .vs-row{gap:10px 16px;}
     #vs-input{min-width:0; width:100%;}       /* was min-width:260px -> horizontal overflow */
     .vs-field{flex-wrap:wrap; min-width:0 !important;
-      margin-left:0 !important;}              /* don't right-push Start/Stop+Clear; left-align w/ Download GIF */
+      margin-left:0 !important;}              /* don't right-push Start/Stop+Clear */
     .vs-slider{flex:1 1 140px;}
     .vs-slider input{width:100%;}             /* was fixed 150px */
+    /* Dissolve the two action rows so Start/Stop, Clear and Download GIF flow
+       onto one left-aligned line together. */
+    .vs-actions{display:flex; flex-wrap:wrap; align-items:flex-end; gap:10px 16px;}
+    .vs-actions > .vs-row{display:contents;}
+    .vs-sep{display:none;}                     /* separator makes no sense once wrapped */
   }
 </style>
 </head>
@@ -112,7 +117,8 @@
   </div>
 
   <div class="vs-controls">
-    <div class="vs-desc" id="vs-input-desc">(Input array as time samples — brackets optional; examples: 1, 2+3j, 3&nbsp;&nbsp;or&nbsp;&nbsp;[1,1,1,1,1])</div>
+    <div class="vs-desc" id="vs-input-desc">Input array as time samples — brackets optional;
+examples: 1, 2+3j, 3&nbsp;&nbsp;or&nbsp;&nbsp;[1,1,1,1,1]</div>
 
     <div class="vs-row">
       <div class="vs-field" style="flex:1; min-width:280px;">
@@ -125,6 +131,9 @@
       </div>
     </div>
 
+    <!-- sliders + action buttons. Wrapped so that on mobile the two rows can
+         dissolve (display:contents) and all three buttons flow onto one line. -->
+    <div class="vs-actions">
     <div class="vs-row">
       <div class="vs-slider">
         <label>Update Time (ms): <span id="vs-time-val">100</span></label>
@@ -146,6 +155,7 @@
     <div class="vs-row">
       <button class="vs-btn" id="vs-savegif">Download GIF</button>
       <span class="vs-note" id="vs-gif-status" style="margin-top:0;"></span>
+    </div>
     </div>
 
     <div class="vs-footer">
@@ -728,7 +738,10 @@ function drawStripPlot(name, side, isMag){
   const rect = rects[name];
   const d = PD[side];
   const ylim = isMag ? d.magYlim : [-Math.PI, Math.PI];
-  const title = (side==='time'?'Time':'Freq') + '-Domain: ' + (isMag?'Magnitude':'Phase');
+  // On the narrow stacked (phone) layout, shorten "Magnitude" so the title fits
+  // the small strip charts; desktop keeps the full word.
+  const magWord = layoutMode==='stacked' ? 'Mag' : 'Magnitude';
+  const title = (side==='time'?'Time':'Freq') + '-Domain: ' + (isMag?magWord:'Phase');
   const xlabel = (side==='time' ? 'Time Index n' : 'Frequency Index k');
   const ylabel = isMag ? 'Magnitude' : 'Radians';
   const mp = makeMapper(rect, d.xlim, ylim, {title, xlabel, ylabel});
@@ -872,9 +885,10 @@ function render(){
 
   if(!PD){
     // empty axes
-    mappers.time_mag  = makeMapper(rects.time_mag,  [0,1],[0,1], {title:'Time-Domain: Magnitude'});
+    const magWord = layoutMode==='stacked' ? 'Mag' : 'Magnitude';
+    mappers.time_mag  = makeMapper(rects.time_mag,  [0,1],[0,1], {title:'Time-Domain: '+magWord});
     mappers.time_phase= makeMapper(rects.time_phase,[0,1],[-Math.PI,Math.PI], {title:'Time-Domain: Phase', xlabel:'Time Index n', ylabel:'Radians'});
-    mappers.freq_mag  = makeMapper(rects.freq_mag,  [0,1],[0,1], {title:'Freq-Domain: Magnitude'});
+    mappers.freq_mag  = makeMapper(rects.freq_mag,  [0,1],[0,1], {title:'Freq-Domain: '+magWord});
     mappers.freq_phase= makeMapper(rects.freq_phase,[0,1],[-Math.PI,Math.PI], {title:'Freq-Domain: Phase', xlabel:'Frequency Index k', ylabel:'Radians'});
     drawAxes(mappers.time_mag); drawAxes(mappers.time_phase);
     drawAxes(mappers.freq_mag); drawAxes(mappers.freq_phase);
@@ -1128,8 +1142,8 @@ function applyInput(){
 function setInputMode(mode){
   vs.input_mode = mode;
   inputDesc.textContent = mode==='time'
-    ? '(Input array as time samples — brackets optional; examples: 1, 2+3j, 3   or   [1,1,1,1,1])'
-    : '(Input array as frequency samples — brackets optional; examples: 0.3, 0, 0, 0.5+0.5j )';
+    ? 'Input array as time samples — brackets optional;\nexamples: 1, 2+3j, 3   or   [1,1,1,1,1]'
+    : 'Input array as frequency samples — brackets optional;\nexamples: 0.3, 0, 0, 0.5+0.5j';
   applyInput();
 }
 
