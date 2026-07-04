@@ -1031,5 +1031,21 @@ applyInput();   // loads the prefilled [1, 2+3j, 3]
 
 })();
 </script>
+
+<!-- Report content height to a parent page (e.g. Squarespace) so a
+     cross-origin iframe can shrink to fit. See the embed snippet in README. -->
+<script>
+(function(){
+  if(window.parent===window) return;   // not embedded
+  function postHeight(){
+    var h=Math.ceil(document.documentElement.getBoundingClientRect().height);
+    window.parent.postMessage({type:'vectorspin:height', height:h}, '*');
+  }
+  window.addEventListener('load', postHeight);
+  window.addEventListener('resize', postHeight);
+  if(window.ResizeObserver){ new ResizeObserver(postHeight).observe(document.body); }
+  postHeight();
+})();
+</script>
 </body>
 </html>
