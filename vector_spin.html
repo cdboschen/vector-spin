@@ -305,6 +305,29 @@ function computeTvalues(){
 let PD = null;      // plot data
 let mappers = {};   // pixel mappers, rebuilt each render
 
+// Largest radius reached by any vertex of the tip-to-tail phasor chain over a
+// full revolution. Mirrors step()'s geometry exactly (same shifts/sign/phase
+// grid) so the IQ limit can be sized to contain the whole chain.
+function chainExtent(phasors){
+  const N = phasors.length; if(!N) return 0;
+  const iqTime = (vs.iq_mode==='time');
+  const sign = iqTime ? 1 : -1;
+  const poff = iqTime ? (TAU*vs.tshift/N) : (-TAU*vs.fshift/N);
+  const ns = Math.max(1, vs.nsamps);
+  let maxR2 = 0;
+  for(let s=0;s<ns;s++){
+    const signed = sign * (s*TAU/ns);
+    let x=0, y=0;
+    for(let k=0;k<N;k++){
+      const m = iqTime ? (k+vs.fshift) : (k+vs.tshift);
+      const p = cmul(phasors[k], cexpj(m*(signed+poff)));
+      x += p.re; y += p.im;
+      const r2 = x*x + y*y; if(r2 > maxR2) maxR2 = r2;
+    }
+  }
+  return Math.sqrt(maxR2);
+}
+
 function computePlotData(){
   const N = vs.tvalues.length;
   const nsamps = vs.nsamps;
@@ -367,6 +390,15 @@ function computePlotData(){
     }
     data.iq.ideal = res;
     data.iq.lim = Math.max(maxAbs(res), maxAbs(data.iq.points), 1e-9) * 1.2;
+    // Also fit the tip-to-tail phasor chain: its intermediate partial sums can
+    // bulge past 1.2*tip (esp. the high-freq phasors at the chain's end). If the
+    // limit doesn't contain them the green chain gets clipped at the plot edge,
+    // which — because only the last of each frame's 1-8 steps is drawn — flashes
+    // in and out. Expanding the limit keeps the whole chain on-screen and steady.
+    let phasors;
+    if(vs.iq_mode==='time') phasors = (vs.input_mode==='time') ? vs.fvalues : scaleArr(vs.fvalues, 1/N);
+    else                    phasors = (vs.input_mode==='freq') ? vs.tvalues : scaleArr(vs.tvalues, 1/N);
+    data.iq.lim = Math.max(data.iq.lim, chainExtent(phasors) * 1.03);
   }
 
   PD = data;
