@@ -628,8 +628,8 @@ function drawStripPlot(name, side, isMag){
   const d = PD[side];
   const ylim = isMag ? d.magYlim : [-Math.PI, Math.PI];
   const title = (side==='time'?'Time':'Freq') + '-Domain: ' + (isMag?'Magnitude':'Phase');
-  const xlabel = isMag ? '' : (side==='time' ? 'Time Index n' : 'Frequency Index k');
-  const ylabel = isMag ? '' : 'Radians';
+  const xlabel = (side==='time' ? 'Time Index n' : 'Frequency Index k');
+  const ylabel = isMag ? 'Magnitude' : 'Radians';
   const mp = makeMapper(rect, d.xlim, ylim, {title, xlabel, ylabel});
   mappers[name] = mp;
   drawAxes(mp);
@@ -711,10 +711,10 @@ function drawGroupBox(){
   ctx.save();
   ctx.beginPath();
   roundRectPath(bx1, top, bx2 - bx1, bot - top, 8);
-  ctx.fillStyle   = 'rgba(31,79,216,0.05)';   // very light blue wash
+  ctx.fillStyle   = 'rgba(31,79,216,0.03)';   // even lighter blue wash
   ctx.fill();
   ctx.lineWidth   = 1;
-  ctx.strokeStyle = 'rgba(31,79,216,0.35)';   // slightly darker blue border
+  ctx.strokeStyle = 'rgba(96,110,140,0.45)';  // blue-gray border
   ctx.stroke();
   ctx.restore();
 }
