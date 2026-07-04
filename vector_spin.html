@@ -472,8 +472,15 @@ function frame(ts){
   if(!anim.lastTs) anim.lastTs = ts;
   let dt = ts - anim.lastTs; anim.lastTs = ts;
   anim.acc += dt;
+  // Cap the catch-up. A long (laggy) frame must not fast-forward many sample
+  // steps into a single render: the high-frequency phasors at the chain's end
+  // rotate the most per step, so a big multi-step jump makes them alias and
+  // whip outward ("jump out from the end"). Clamp the backlog and the steps per
+  // frame so the phase advances at most ~2 samples per rendered frame; normal
+  // playback (0-2 steps/frame) is unchanged, only lag spikes are tamed.
+  if(anim.acc > vs.refresh * 2) anim.acc = vs.refresh * 2;
   let steps = 0;
-  while(anim.acc >= vs.refresh && steps < 8){ step(); anim.acc -= vs.refresh; steps++; }
+  while(anim.acc >= vs.refresh && steps < 2){ step(); anim.acc -= vs.refresh; steps++; }
   if(steps===0 && anim.phaseMag===0 && anim.chainX.length===1){ step(); } // draw first frame promptly
   render();
   requestAnimationFrame(frame);
