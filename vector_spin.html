@@ -63,6 +63,21 @@
   }
   .vs-footer .vs-foot-text{font-size:13px; color:#555;}
   .vs-footer img.vs-logo{height:44px; width:auto; display:block;}
+  /* Narrow screens (phones): the canvas reflows to a stacked/portrait layout
+     (IQ on top, 2x2 strip-chart grid below) in JS at the same 700px breakpoint.
+     Here we un-align the control bar from the wide plot columns so it stacks
+     and centers instead of cramping. Purely additive — inert above 700px. */
+  @media (max-width:700px){
+    .vs-shiftbar{flex-direction:column; align-items:stretch; gap:10px;
+      margin-top:8px; margin-bottom:10px;}   /* remove the -18px tuck under wide plot cols */
+    .vs-shift-col, .vs-iqmode-col{width:100%; justify-content:center;}
+    .vs-iqmode-col{flex-wrap:wrap;}
+    .vs-row{gap:10px 16px;}
+    #vs-input{min-width:0; width:100%;}       /* was min-width:260px -> horizontal overflow */
+    .vs-field{flex-wrap:wrap; min-width:0 !important;} /* beat inline min-width:280px */
+    .vs-slider{flex:1 1 140px;}
+    .vs-slider input{width:100%;}             /* was fixed 150px */
+  }
 </style>
 </head>
 <body>
@@ -497,47 +512,93 @@ function stopAnim(){ anim.running = false; }
 // ---------------------------------------------------------------------------
 const canvas = document.getElementById('vs-canvas');
 const ctx = canvas.getContext('2d');
-const CW = canvas.width, CH = canvas.height;
 
-// scale for crisp rendering on HiDPI
-(function setupHiDPI(){
-  const dpr = window.devicePixelRatio || 1;
-  if(dpr !== 1){
-    canvas.width = CW * dpr; canvas.height = CH * dpr;
-    canvas.style.width = '100%';
-    ctx.scale(dpr, dpr);
-  }
-})();
-
-// shared plot margins (used for layout + mapping)
+// shared plot margins (used for layout + mapping) — mode-independent
 const MARGIN = {left:44, right:12, top:22, bottom:32};
-
-// layout: IQ spans the middle 2 columns at full height. The left (time) and
-// right (freq) mag/phase plots are sized so each stacked pair spans exactly the
-// IQ plot's square drawing region, vertically aligned with it.
 const PAD = 8;
-const areaW = CW - 2*PAD, areaH = CH - 2*PAD;
-const colW = areaW/4;
-const iqRect = {x:PAD+colW, y:PAD, w:colW*2, h:areaH};
-// IQ inner square (equal aspect) and its vertical extent
-const iqInnerW = iqRect.w - MARGIN.left - MARGIN.right;
-const iqInnerH = iqRect.h - MARGIN.top - MARGIN.bottom;
-const iqSquare = Math.min(iqInnerW, iqInnerH);
-const iqSqTop  = iqRect.y + MARGIN.top + (iqInnerH - iqSquare)/2;
-// side plots: two stacked, together matching the IQ square height
 const sideGap = 12;
-const sideH   = (iqSquare - sideGap)/2;
-// IQ draw rect: sized so its plot border aligns with the magnitude plots' top
-// edge and the phase plots' bottom edge (rect spans the side-plot column region,
-// margins then inset the equal-aspect square to match those borders exactly).
-const iqDrawRect = {x:PAD+colW, y:iqSqTop, w:colW*2, h:iqSquare};
-const rects = {
-  time_mag:   {x:PAD,        y:iqSqTop,               w:colW, h:sideH},
-  time_phase: {x:PAD,        y:iqSqTop+sideH+sideGap, w:colW, h:sideH},
-  iq:         iqDrawRect,
-  freq_mag:   {x:PAD+colW*3, y:iqSqTop,               w:colW, h:sideH},
-  freq_phase: {x:PAD+colW*3, y:iqSqTop+sideH+sideGap, w:colW, h:sideH},
-};
+
+// Layout is recomputed per screen size (see computeLayout). The canvas logical
+// size (CW/CH) and all plot rectangles are reassignable: on wide screens they
+// reproduce today's exact 1080x558 desktop layout; on narrow screens they reflow
+// to a stacked/portrait arrangement. Variable names are unchanged so the render
+// functions below keep referencing them directly.
+let CW, CH, areaW, areaH, colW, iqRect, iqInnerW, iqInnerH,
+    iqSquare, iqSqTop, sideH, iqDrawRect, rects;
+let layoutMode = 'wide';
+
+// Which layout to use, keyed to the same 700px breakpoint as the CSS @media rule
+// so the canvas reflow and the control-bar reflow flip together.
+function currentMode(){
+  return window.matchMedia('(max-width:700px)').matches ? 'stacked' : 'wide';
+}
+const clampw = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
+function computeLayout(mode){
+  layoutMode = mode;
+  if(mode !== 'stacked'){
+    // ---- wide (desktop): identical to the original fixed layout ----
+    // IQ spans the middle 2 columns at full height; the left (time) and right
+    // (freq) mag/phase plots are sized so each stacked pair spans exactly the IQ
+    // plot's square drawing region, vertically aligned with it.
+    CW = 1080; CH = 558;
+    areaW = CW - 2*PAD; areaH = CH - 2*PAD;
+    colW = areaW/4;
+    iqRect = {x:PAD+colW, y:PAD, w:colW*2, h:areaH};
+    iqInnerW = iqRect.w - MARGIN.left - MARGIN.right;
+    iqInnerH = iqRect.h - MARGIN.top - MARGIN.bottom;
+    iqSquare = Math.min(iqInnerW, iqInnerH);
+    iqSqTop  = iqRect.y + MARGIN.top + (iqInnerH - iqSquare)/2;
+    sideH    = (iqSquare - sideGap)/2;
+    iqDrawRect = {x:PAD+colW, y:iqSqTop, w:colW*2, h:iqSquare};
+    rects = {
+      time_mag:   {x:PAD,        y:iqSqTop,               w:colW, h:sideH},
+      time_phase: {x:PAD,        y:iqSqTop+sideH+sideGap, w:colW, h:sideH},
+      iq:         iqDrawRect,
+      freq_mag:   {x:PAD+colW*3, y:iqSqTop,               w:colW, h:sideH},
+      freq_phase: {x:PAD+colW*3, y:iqSqTop+sideH+sideGap, w:colW, h:sideH},
+    };
+    return;
+  }
+  // ---- stacked (phone/portrait): IQ square on top, 2x2 strip grid below ----
+  const wrapW = (canvas.parentElement && canvas.parentElement.clientWidth) || 360;
+  CW = Math.round(clampw(wrapW, 340, 560));   // logical ~= display px -> legible fonts
+  const iqRectW = CW - 2*PAD;
+  iqInnerW = iqRectW - MARGIN.left - MARGIN.right;
+  iqSquare = iqInnerW;                          // equal-aspect square fills the width
+  iqInnerH = iqSquare;
+  iqSqTop  = PAD + MARGIN.top;                  // no vertical centering offset
+  iqDrawRect = {x:PAD, y:PAD, w:iqRectW, h:iqSquare + MARGIN.top + MARGIN.bottom};
+  // 2x2 grid of strip charts under the IQ plot
+  const sectionGap = 16, colGap = 10, rowGap = 14;
+  const gridColW = (CW - 2*PAD - colGap)/2;
+  const rowH = Math.round(clampw(gridColW*0.62, 130, 180));
+  const gridTop = iqDrawRect.y + iqDrawRect.h + sectionGap;
+  const leftX = PAD, rightX = PAD + gridColW + colGap;
+  const row1Y = gridTop, row2Y = gridTop + rowH + rowGap;
+  rects = {
+    time_mag:   {x:leftX,  y:row1Y, w:gridColW, h:rowH},
+    freq_mag:   {x:rightX, y:row1Y, w:gridColW, h:rowH},
+    iq:         iqDrawRect,
+    time_phase: {x:leftX,  y:row2Y, w:gridColW, h:rowH},
+    freq_phase: {x:rightX, y:row2Y, w:gridColW, h:rowH},
+  };
+  CH = row2Y + rowH + PAD;
+  // areaW/areaH/colW/sideH are read only by the wide path; left stale here.
+}
+
+// (Re)size the backing store for crisp HiDPI rendering. Idempotent across
+// relayouts: reset the transform before scaling so repeated calls don't compound.
+function applyCanvasSize(){
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width  = Math.round(CW*dpr);
+  canvas.height = Math.round(CH*dpr);
+  canvas.style.width = '100%';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+computeLayout(currentMode());
+applyCanvasSize();
 
 function niceTicks(min, max, count){
   const span = max - min;
@@ -724,6 +785,7 @@ function roundRectPath(x, y, w, h, r){
 // "these three -> (arrow) -> the other domain". Drawn behind the plots as a very
 // light shade + faint border; excludes the shift controls below the plots.
 function drawGroupBox(){
+  if(layoutMode !== 'wide') return;   // horizontal source->target aid; N/A in stacked grid
   const m = MARGIN;
   // IQ inner square horizontal extent (mirrors makeMapper's equal-aspect math)
   const iqInW = iqDrawRect.w - m.left - m.right;
@@ -761,6 +823,7 @@ function drawGroupBox(){
 function drawArrow(){
   // red DFT-direction arrow between IQ and the target column; '/N' label when dividing.
   // ~2x larger than before, kept clear of the IQ plot axis with a fixed gap.
+  if(layoutMode !== 'wide') return;   // horizontal DFT arrow; N/A in stacked grid
   const iq = mappers.iq; if(!iq) return;
   ctx.save();
   ctx.strokeStyle = '#d62728'; ctx.fillStyle = '#d62728'; ctx.lineWidth = 8;
@@ -978,6 +1041,10 @@ async function saveGif(){
   const btn = el('vs-savegif'), status = el('vs-gif-status');
   const wasRunning = anim.running; stopAnim(); btn.disabled = true;
   const yield_ = ()=> new Promise(r=>setTimeout(r,0));
+  // Always export the wide 1080x558 layout so phone users still get the full
+  // shareable GIF (restored in finally). On desktop this is a no-op.
+  const prevMode = layoutMode;
+  computeLayout('wide'); applyCanvasSize();
   try{
     const scale = Math.min(1, 720/CW);
     const GW = Math.round(CW*scale), GH = Math.round(CH*scale);
@@ -1024,6 +1091,8 @@ async function saveGif(){
     status.textContent = 'GIF export failed: ' + err.message;
   } finally {
     btn.disabled = false; gifBusy = false;
+    // restore the on-screen layout (stacked on phones) before repainting
+    computeLayout(prevMode); applyCanvasSize(); _lastKey = '';
     armAnimation();
     if(wasRunning) startAnim(); else render();
   }
@@ -1119,6 +1188,31 @@ el('vs-clear').addEventListener('click', ()=>{
   PD=null; anim.chainX=[0]; anim.chainY=[0]; clearHistory();
   render();
 });
+
+// Responsive relayout: switch between the wide desktop layout and the stacked
+// phone layout when the viewport crosses the breakpoint (or the container width
+// changes). Rebuild only on an actual mode/size change to avoid thrashing during
+// animation or scroll. The running animation repaints itself; when paused we
+// render() explicitly.
+let _relayoutRAF = 0, _lastKey = '';
+function scheduleRelayout(){
+  if(gifBusy) return;   // never relayout mid-GIF capture (it forces wide temporarily)
+  cancelAnimationFrame(_relayoutRAF);
+  _relayoutRAF = requestAnimationFrame(()=>{
+    const mode = currentMode();
+    const wrapW = (canvas.parentElement && canvas.parentElement.clientWidth) || 360;
+    const key = mode + ':' + (mode==='wide' ? '1080' : Math.round(clampw(wrapW,340,560)));
+    if(key === _lastKey) return;
+    _lastKey = key;
+    computeLayout(mode); applyCanvasSize();
+    if(!anim.running) render();
+  });
+}
+if(window.ResizeObserver){
+  // observe the wrapper, not the canvas, to avoid feedback from our own resize
+  new ResizeObserver(scheduleRelayout).observe(canvas.parentElement);
+}
+window.matchMedia('(max-width:700px)').addEventListener('change', scheduleRelayout);
 
 // initial state
 updateShiftLabels();
