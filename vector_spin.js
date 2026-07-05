@@ -1124,6 +1124,191 @@ async function saveGif(){
 }
 
 // ---------------------------------------------------------------------------
+// 6b. MP4 export — real H.264 via WebCodecs VideoEncoder, muxed into a plain
+//     (non-fragmented) MP4 with a tiny inlined ISO-BMFF writer. Reuses the same
+//     wide layout + footer + supersampling as the GIF; the High-res toggle
+//     applies. Needs a Chromium/Safari browser (Firefox lacks VideoEncoder).
+// ---------------------------------------------------------------------------
+async function saveMp4(){
+  if(gifBusy || vs.tvalues.length===0) return;
+  const status = el('vs-gif-status');
+  if(!('VideoEncoder' in window) || typeof VideoFrame === 'undefined'){
+    status.className = 'vs-note'; status.textContent = 'MP4 export needs a Chromium or Safari browser (this one has no VideoEncoder).';
+    return;
+  }
+  gifBusy = true; gifExporting = true;
+  const gbtn = el('vs-savegif'), mbtn = el('vs-savemp4');
+  const hiRes = !!(el('vs-hires') && el('vs-hires').checked);
+  const wasRunning = anim.running; stopAnim();
+  gbtn.disabled = true; mbtn.disabled = true;
+  const yield_ = ()=> new Promise(r=>setTimeout(r,0));
+  const prevMode = layoutMode;
+  computeLayout('wide'); applyCanvasSize();
+  try{
+    const SS = hiRes ? 2 : 1.5;
+    const FH = 46;
+    let GW = Math.round(CW*SS), GH = Math.round((CH+FH)*SS);
+    GW -= GW % 2; GH -= GH % 2;                    // H.264 requires even dimensions
+    canvas.width = GW; canvas.height = GH;
+    ctx1.setTransform(SS,0,0,SS,0,0);
+
+    const logo = document.querySelector('img.vs-logo');
+    const footText = (document.querySelector('.vs-foot-text') || {}).textContent || 'VectorSpin  https://dsp-coach.com';
+    const drawFooter = ()=>{                        // same branded footer as the GIF
+      const c = ctx1;
+      c.fillStyle = '#fff'; c.fillRect(0, CH, CW, FH);
+      c.strokeStyle = '#ccc'; c.lineWidth = 1;
+      c.beginPath(); c.moveTo(PAD, CH+0.5); c.lineTo(CW-PAD, CH+0.5); c.stroke();
+      const midY = CH + FH/2;
+      if(logo && logo.complete && logo.naturalWidth){
+        const LH = 34, LW = LH * logo.naturalWidth/logo.naturalHeight;
+        c.drawImage(logo, CW-PAD-LW, midY-LH/2, LW, LH);
+      }
+      c.fillStyle = '#444'; c.font = '16px sans-serif';
+      c.textAlign = 'left'; c.textBaseline = 'middle';
+      c.fillText(footText, PAD, midY+1);
+    };
+
+    // Frame rate follows the Update-Time slider so the clip runs at on-screen
+    // speed; MP4 handles every frame, so both modes use the full frame count.
+    const fps = Math.max(1, Math.min(120, Math.round(1000 / vs.refresh)));
+    let bitrate = Math.round(GW*GH*fps * (hiRes ? 0.15 : 0.1));
+    bitrate = Math.max(2e6, Math.min(40e6, bitrate));
+
+    // Pick the first supported H.264 profile/level that fits these dimensions.
+    let codec = null;
+    for(const c of ['avc1.640034','avc1.640028','avc1.4d0034','avc1.4d0028']){
+      try{ const s = await VideoEncoder.isConfigSupported({codec:c, width:GW, height:GH, bitrate, framerate:fps});
+        if(s && s.supported){ codec = c; break; } }catch(e){ /* try next */ }
+    }
+    if(!codec) throw new Error('no supported H.264 configuration for ' + GW + '×' + GH);
+
+    const totalSteps = vs.nsamps;
+    const warmup = ()=>{ armAnimation(); for(let i=0;i<totalSteps;i++) step(); };
+
+    const encoded = [];            // { data:Uint8Array, key:bool, duration:int (µs) }
+    let description = null;         // avcC bytes from decoderConfig.description
+    let encErr = null;
+    const encoder = new VideoEncoder({
+      output: (chunk, meta)=>{
+        if(!description && meta && meta.decoderConfig && meta.decoderConfig.description)
+          description = new Uint8Array(meta.decoderConfig.description);
+        const buf = new Uint8Array(chunk.byteLength);
+        chunk.copyTo(buf);
+        encoded.push({ data: buf, key: chunk.type === 'key', duration: chunk.duration || Math.round(1e6/fps) });
+      },
+      error: (e)=>{ encErr = e; }
+    });
+    encoder.configure({ codec, width:GW, height:GH, bitrate, framerate:fps, avc:{format:'avc'} });
+
+    status.className = 'vs-note'; status.textContent = 'Rendering frames…'; await yield_();
+    warmup();
+    const durUs = Math.round(1e6 / fps);
+    for(let f=0; f<totalSteps; f++){
+      if(encErr) throw encErr;
+      step();
+      render(); drawFooter();
+      const frame = new VideoFrame(canvas, { timestamp: f*durUs, duration: durUs });
+      encoder.encode(frame, { keyFrame: (f % fps) === 0 });   // a keyframe ~once per second (f=0 is key)
+      frame.close();
+      while(encoder.encodeQueueSize > 16) await yield_();      // throttle so memory stays bounded
+      if(f % 10 === 0){ status.textContent = `Encoding… ${f}/${totalSteps}`; await yield_(); }
+    }
+    await encoder.flush();
+    encoder.close();
+    if(encErr) throw encErr;
+    if(!encoded.length) throw new Error('encoder produced no frames');
+    if(!description) throw new Error('encoder did not provide an avcC configuration');
+
+    status.textContent = 'Muxing MP4…'; await yield_();
+    const mp4 = muxMp4(GW, GH, fps, encoded, description);
+    const blob = new Blob([mp4], { type:'video/mp4' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'vectorspin.mp4';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url), 2000);
+    status.textContent = `Saved MP4 — ${encoded.length} frames, ${GW}×${GH}, ${Math.round(mp4.length/1024)} KB`;
+  } catch(err){
+    status.className = 'vs-note'; status.textContent = 'MP4 export failed: ' + (err && err.message ? err.message : err);
+  } finally {
+    gbtn.disabled = false; mbtn.disabled = false; gifBusy = false; gifExporting = false;
+    computeLayout(prevMode); applyCanvasSize(); placeIqMode(prevMode); _lastKey = '';
+    armAnimation();
+    if(wasRunning) startAnim(); else render();
+  }
+}
+
+// Minimal non-fragmented MP4 (ISO-BMFF) writer for one H.264 track.
+// Layout: ftyp | mdat (all samples) | moov. Single chunk; stco points into mdat.
+function muxMp4(width, height, fps, samples, avcC){
+  const timescale = 1000000;                       // µs — matches WebCodecs timestamps
+  const totalDur = samples.reduce((a,s)=>a + s.duration, 0);
+  const enc = new TextEncoder();
+  const str = s => enc.encode(s);
+  const u32 = n => { const b=new Uint8Array(4); new DataView(b.buffer).setUint32(0, n>>>0); return b; };
+  const u16 = n => { const b=new Uint8Array(2); new DataView(b.buffer).setUint16(0, n & 0xffff); return b; };
+  const cat = arrs => { let len=0; for(const a of arrs) len+=a.length; const o=new Uint8Array(len); let p=0; for(const a of arrs){ o.set(a,p); p+=a.length; } return o; };
+  const box = (type, ...children) => cat([u32(8 + children.reduce((a,c)=>a+c.length,0)), str(type), ...children]);
+  const fbox = (type, version, flags, ...children) => box(type, new Uint8Array([version, (flags>>16)&0xff, (flags>>8)&0xff, flags&0xff]), ...children);
+  const MATRIX = cat([u32(0x00010000),u32(0),u32(0), u32(0),u32(0x00010000),u32(0), u32(0),u32(0),u32(0x40000000)]);
+
+  const ftyp = box('ftyp', str('isom'), u32(0x200), str('isom'), str('iso2'), str('avc1'), str('mp41'));
+
+  const mdatData = cat(samples.map(s=>s.data));
+  const mdat = box('mdat', mdatData);
+  const chunkOffset = ftyp.length + 8;             // first sample byte = start of mdat payload
+
+  // --- sample tables ---
+  // stts: coalesce runs of equal durations
+  const sttsEntries = [];
+  for(const s of samples){
+    const last = sttsEntries[sttsEntries.length-1];
+    if(last && last.delta === s.duration) last.count++;
+    else sttsEntries.push({ count:1, delta:s.duration });
+  }
+  const stts = fbox('stts', 0, 0, u32(sttsEntries.length), ...sttsEntries.flatMap(e=>[u32(e.count), u32(e.delta)]));
+
+  const keyIdx = [];
+  samples.forEach((s,i)=>{ if(s.key) keyIdx.push(i+1); });   // 1-based
+  const allKey = keyIdx.length === samples.length;
+  const stss = allKey ? new Uint8Array(0) : fbox('stss', 0, 0, u32(keyIdx.length), ...keyIdx.map(u32));
+
+  const stsc = fbox('stsc', 0, 0, u32(1), u32(1), u32(samples.length), u32(1));
+  const stsz = fbox('stsz', 0, 0, u32(0), u32(samples.length), ...samples.map(s=>u32(s.data.length)));
+  const stco = fbox('stco', 0, 0, u32(1), u32(chunkOffset));
+
+  // avc1 sample entry
+  const compressorname = new Uint8Array(32);
+  const avc1 = box('avc1',
+    new Uint8Array(6), u16(1),                     // reserved[6], data_reference_index
+    u16(0), u16(0), cat([u32(0),u32(0),u32(0)]),   // pre_defined, reserved, pre_defined[3]
+    u16(width), u16(height),
+    u32(0x00480000), u32(0x00480000), u32(0),      // h/v resolution, reserved
+    u16(1), compressorname, u16(0x0018), u16(0xffff), // frame_count, name, depth, pre_defined
+    box('avcC', avcC));
+  const stsd = fbox('stsd', 0, 0, u32(1), avc1);
+
+  const stbl = box('stbl', stsd, stts, stss, stsc, stsz, stco);
+  const url  = fbox('url ', 0, 1);
+  const dref = fbox('dref', 0, 0, u32(1), url);
+  const dinf = box('dinf', dref);
+  const vmhd = fbox('vmhd', 0, 1, u16(0), u16(0), u16(0), u16(0));
+  const minf = box('minf', vmhd, dinf, stbl);
+  const hdlr = fbox('hdlr', 0, 0, u32(0), str('vide'), u32(0), u32(0), u32(0), cat([str('VideoHandler'), new Uint8Array([0])]));
+  const mdhd = fbox('mdhd', 0, 0, u32(0), u32(0), u32(timescale), u32(totalDur), u16(0x55c4), u16(0));
+  const mdia = box('mdia', mdhd, hdlr, minf);
+  const tkhd = fbox('tkhd', 0, 0x7, u32(0), u32(0), u32(1), u32(0), u32(totalDur),
+    u32(0), u32(0), u16(0), u16(0), u16(0), u16(0), MATRIX, u32(width<<16), u32(height<<16));
+  const trak = box('trak', tkhd, mdia);
+  const mvhd = fbox('mvhd', 0, 0, u32(0), u32(0), u32(timescale), u32(totalDur),
+    u32(0x00010000), u16(0x0100), u16(0), u32(0), u32(0), MATRIX,
+    ...Array.from({length:6}, ()=>u32(0)), u32(2));
+  const moov = box('moov', mvhd, trak);
+
+  return cat([ftyp, mdat, moov]);
+}
+
+// ---------------------------------------------------------------------------
 // 5. UI wiring
 // ---------------------------------------------------------------------------
 const el = id => document.getElementById(id);
@@ -1336,6 +1521,7 @@ el('vs-startstop').addEventListener('click', ()=>{
   if(anim.running) stopAnim(); else startAnim();
 });
 el('vs-savegif').addEventListener('click', saveGif);
+el('vs-savemp4').addEventListener('click', saveMp4);
 el('vs-clear').addEventListener('click', ()=>{
   stopAnim();
   vs.tvalues=[]; vs.fvalues=[]; vs.tshift=0; vs.fshift=0;
