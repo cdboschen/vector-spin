@@ -1461,16 +1461,17 @@ function onPointerLeave(e){
   if(e.pointerType==='touch') return;
   setHighlight(null);
 }
-function onCanvasClick(e){                         // tap path (phone) + desktop click
-  const ic = interactiveCanvas();
-  if(e.currentTarget !== ic.cnv) return;
-  setHighlight(hitTestImpulse(e, ic.cnv, ic.w, ic.h));   // miss -> null (tap elsewhere clears)
-}
 for(const c of [canvas, canvas2]){
   c.addEventListener('pointermove', onPointerMove);
   c.addEventListener('pointerleave', onPointerLeave);
-  c.addEventListener('click', onCanvasClick);
 }
+// Tap path (phone) + desktop click, handled at the document level so that ANY
+// click not on an impulse clears the selection (taps on the IQ plot, the controls,
+// or empty space) — only a tap on an impulse in the interactive canvas selects.
+document.addEventListener('click', e=>{
+  const ic = interactiveCanvas();
+  setHighlight(e.target === ic.cnv ? hitTestImpulse(e, ic.cnv, ic.w, ic.h) : null);
+});
 
 // initial state
 updateShiftLabels();
