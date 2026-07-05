@@ -649,6 +649,25 @@ function placeIqMode(mode){
   }
 }
 
+// Move the input help text + input row to the very top of the page on mobile
+// (before the IQ plot), and back to their normal spot in the controls on desktop.
+let _inpHome = null, _inpAnchor = null;
+function placeInputBlock(mode){
+  const desc = document.getElementById('vs-input-desc');
+  const inp  = document.getElementById('vs-input');
+  const row  = inp && inp.closest('.vs-row');
+  const root = document.querySelector('.vs-root');
+  if(!desc || !row || !root) return;
+  if(!_inpHome){ _inpHome = desc.parentElement; _inpAnchor = row.nextElementSibling; }
+  if(mode === 'stacked'){
+    root.insertBefore(desc, root.firstChild);   // help text first
+    root.insertBefore(row, desc.nextSibling);   // then the input row, still above the IQ plot
+  } else if(desc.parentElement !== _inpHome){
+    _inpHome.insertBefore(desc, _inpAnchor);    // restore: desc, then row, before their old anchor
+    _inpHome.insertBefore(row, _inpAnchor);
+  }
+}
+
 // (Re)size the backing store for crisp HiDPI rendering. Idempotent across
 // relayouts: reset the transform before scaling so repeated calls don't compound.
 function applyCanvasSize(){
@@ -668,6 +687,7 @@ function applyCanvasSize(){
 computeLayout(currentMode());
 applyCanvasSize();
 placeIqMode(layoutMode);
+placeInputBlock(layoutMode);
 
 function niceTicks(min, max, count){
   const span = max - min;
@@ -1291,7 +1311,7 @@ function scheduleRelayout(){
     const key = mode + ':' + (mode==='wide' ? '1080' : Math.round(clampw(wrapW,340,560)));
     if(key === _lastKey) return;
     _lastKey = key;
-    computeLayout(mode); applyCanvasSize(); placeIqMode(mode);
+    computeLayout(mode); applyCanvasSize(); placeIqMode(mode); placeInputBlock(mode);
     if(!anim.running) render();
   });
 }
