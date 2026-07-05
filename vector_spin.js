@@ -276,6 +276,9 @@ const anim = {
 // currently pointed at, or null when nothing is selected. When set, non-selected
 // phasors/impulses render pale grey (DIM) while index k stays full colour.
 let highlightIndex = null;
+// A click "pins" a selection so it survives the cursor leaving the canvas (and the
+// click that starts a GIF/MP4 export); hover only previews on top of the pin.
+let pinnedHighlight = null;
 const DIM = '#cfcfcf';
 
 function clearHistory(){
@@ -995,6 +998,9 @@ function assembleGif(width, height, palette, frames, delayCs){
 let gifBusy = false, gifExporting = false;
 async function saveGif(){
   if(gifBusy || vs.tvalues.length===0) return;
+  // Capture the current phasor highlight NOW, before the button-click bubbles to
+  // the document handler that clears it — so the export shows the same spotlight.
+  const savedHighlight = highlightIndex;
   gifBusy = true; gifExporting = true;
   const btn = el('vs-savegif'), status = el('vs-gif-status');
   const hiRes = !!(el('vs-hires') && el('vs-hires').checked);   // full-res + every frame
@@ -1051,6 +1057,7 @@ async function saveGif(){
     // ---- pass 1: build the palette from ~80 sampled frames; keep a few to
     //      measure the average encoded frame size for the file-size budget ----
     status.textContent = 'Analyzing…'; await yield_();
+    highlightIndex = savedHighlight;   // re-apply after the click-clear so frames show the spotlight
     const pStride = Math.max(1, Math.ceil(totalSteps/80));
     const hist = new Map();
     const samples = [];
@@ -1119,6 +1126,7 @@ async function saveGif(){
     // restore the on-screen layout (stacked on phones) before repainting
     computeLayout(prevMode); applyCanvasSize(); placeIqMode(prevMode); _lastKey = '';
     armAnimation();
+    highlightIndex = pinnedHighlight = savedHighlight;   // keep the spotlight on screen, matching the export
     if(wasRunning) startAnim(); else render();
   }
 }
@@ -1131,6 +1139,7 @@ async function saveGif(){
 // ---------------------------------------------------------------------------
 async function saveMp4(){
   if(gifBusy || vs.tvalues.length===0) return;
+  const savedHighlight = highlightIndex;   // capture before the click-clear (see saveGif)
   const status = el('vs-gif-status');
   if(!('VideoEncoder' in window) || typeof VideoFrame === 'undefined'){
     status.className = 'vs-note'; status.textContent = 'MP4 export needs a Chromium or Safari browser (this one has no VideoEncoder).';
@@ -1202,6 +1211,7 @@ async function saveMp4(){
     encoder.configure({ codec, width:GW, height:GH, bitrate, framerate:fps, avc:{format:'avc'} });
 
     status.className = 'vs-note'; status.textContent = 'Rendering frames…'; await yield_();
+    highlightIndex = savedHighlight;   // re-apply after the click-clear so frames show the spotlight
     warmup();
     const durUs = Math.round(1e6 / fps);
     for(let f=0; f<totalSteps; f++){
@@ -1234,6 +1244,7 @@ async function saveMp4(){
     gbtn.disabled = false; mbtn.disabled = false; gifBusy = false; gifExporting = false;
     computeLayout(prevMode); applyCanvasSize(); placeIqMode(prevMode); _lastKey = '';
     armAnimation();
+    highlightIndex = pinnedHighlight = savedHighlight;   // keep the spotlight on screen, matching the export
     if(wasRunning) startAnim(); else render();
   }
 }
@@ -1316,7 +1327,7 @@ const inputEl   = el('vs-input');
 const inputDesc = el('vs-input-desc');
 
 function refreshPlots(){
-  highlightIndex = null;   // data/domain/shift changed -> any selection is stale
+  highlightIndex = null; pinnedHighlight = null;   // data/domain/shift changed -> any selection is stale
   computePlotData();
   armAnimation();
   render();
@@ -1527,7 +1538,7 @@ el('vs-clear').addEventListener('click', ()=>{
   vs.tvalues=[]; vs.fvalues=[]; vs.tshift=0; vs.fshift=0;
   inputEl.value=''; inputEl.classList.remove('vs-error');
   updateShiftLabels();
-  PD=null; anim.chainX=[0]; anim.chainY=[0]; clearHistory(); highlightIndex=null;
+  PD=null; anim.chainX=[0]; anim.chainY=[0]; clearHistory(); highlightIndex=null; pinnedHighlight=null;
   render();
 });
 
@@ -1593,11 +1604,11 @@ function onPointerMove(e){
   if(e.currentTarget !== ic.cnv) return;
   const k = hitTestImpulse(e, ic.cnv, ic.w, ic.h);
   ic.cnv.style.cursor = (k!=null) ? 'pointer' : 'default';
-  setHighlight(k);                                // clears (null) the moment it leaves an impulse
+  setHighlight(k != null ? k : pinnedHighlight); // preview under the cursor, else the pinned selection
 }
 function onPointerLeave(e){
   if(e.pointerType==='touch') return;
-  setHighlight(null);
+  setHighlight(pinnedHighlight);                 // keep the pinned selection when the cursor leaves
 }
 for(const c of [canvas, canvas2]){
   c.addEventListener('pointermove', onPointerMove);
@@ -1608,7 +1619,9 @@ for(const c of [canvas, canvas2]){
 // or empty space) — only a tap on an impulse in the interactive canvas selects.
 document.addEventListener('click', e=>{
   const ic = interactiveCanvas();
-  setHighlight(e.target === ic.cnv ? hitTestImpulse(e, ic.cnv, ic.w, ic.h) : null);
+  const k = (e.target === ic.cnv) ? hitTestImpulse(e, ic.cnv, ic.w, ic.h) : null;
+  pinnedHighlight = k;                            // pin on an impulse tap/click; clear on any other click
+  setHighlight(k);
 });
 
 // initial state
