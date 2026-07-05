@@ -48,6 +48,7 @@
   button.vs-btn:disabled{opacity:.4; cursor:default;}
   /* CSV upload for IQ data */
   .vs-upload-block{margin:6px 0 4px;}
+  .vs-sample-link{font-size:12px; margin-left:12px; white-space:nowrap;}
   .vs-upload-panel{border:1px solid var(--border); border-radius:6px; padding:10px 12px;
     margin-top:8px; background:var(--panel); max-width:540px;}
   .vs-upload-help{font-size:12.5px; color:#555; line-height:1.55; margin-bottom:8px;}
@@ -175,6 +176,7 @@ examples: 1, 2+3j, 3&nbsp;&nbsp;or&nbsp;&nbsp;[1,1,1,1,1]</div>
          Moves with the input block on mobile (see placeInputBlock). -->
     <div class="vs-upload-block" id="vs-upload-block">
       <button class="vs-btn" id="vs-upload-btn">Upload CSV…</button>
+      <a class="vs-sample-link" href="samples/hilbert_31_kaiser8.csv" download>download sample (Hilbert)</a>
       <div class="vs-upload-panel" id="vs-upload-panel" style="display:none;">
         <div class="vs-upload-help">
           Upload IQ data as a <b>two-column CSV</b>: <code>real, imag</code> — one complex
