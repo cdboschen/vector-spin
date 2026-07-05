@@ -1,0 +1,106 @@
+  :root{
+    --blue:#1f4fd8; --red:#d62728; --green:#2ca02c; --hist:#1f77ff;
+    --grid:#d9d9d9; --axis:#555; --ink:#222; --panel:#f7f7f7; --border:#ccc;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0; background:#fff;}
+  .vs-root{
+    font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+    color:var(--ink); max-width:1100px; margin:0 auto; padding:8px;
+  }
+  .vs-canvas-wrap{width:100%;}
+  #vs-canvas, #vs-canvas2{width:100%; height:auto; display:block; background:#fff;}
+  #vs-canvas2-wrap{display:none;}           /* strip-chart canvas: mobile only */
+  .vs-midbar{}                               /* empty/collapsed on desktop */
+  .vs-title{display:none;}                    /* page title: mobile only */
+  .vs-controls{margin-top:0;}
+  .vs-row{display:flex; flex-wrap:wrap; gap:14px 22px; align-items:center; margin:8px 0;}
+  .vs-field{display:flex; align-items:center; gap:8px;}
+  .vs-field label{font-size:13px; white-space:nowrap;}
+  .vs-desc{font-size:12px; color:#666; margin:2px 0 6px; white-space:pre-line;}
+  #vs-input{
+    font-family:ui-monospace,Consolas,Menlo,monospace; font-size:14px;
+    padding:6px 8px; border:1px solid var(--border); border-radius:4px;
+    min-width:260px; flex:1;
+  }
+  #vs-input.vs-error{border-color:var(--red); color:var(--red);}
+  .vs-radio{display:inline-flex; gap:10px; align-items:center;}
+  .vs-radio label{font-size:13px; display:inline-flex; align-items:center; gap:4px; cursor:pointer;}
+  button.vs-btn{
+    font-size:13px; padding:6px 12px; border:1px solid var(--border);
+    background:#fff; border-radius:4px; cursor:pointer;
+  }
+  button.vs-btn:hover{background:#eee;}
+  button.vs-btn:disabled{opacity:.4; cursor:default;}
+  /* CSV upload for IQ data */
+  .vs-upload-block{margin:6px 0 4px;}
+  .vs-samples-list{display:flex; flex-direction:column; gap:6px; margin-bottom:2px;}
+  .vs-sample-item{display:inline-flex; align-items:baseline; gap:8px; text-align:left;
+    background:#fff; border:1px solid var(--border); border-radius:4px; padding:6px 10px;
+    cursor:pointer; font-size:13px; color:var(--ink); font-family:inherit; width:fit-content;
+    max-width:100%;}
+  .vs-sample-item:hover{background:#eee;}
+  .vs-sample-item .note{color:#777; font-size:12px;}
+  .vs-upload-panel{border:1px solid var(--border); border-radius:6px; padding:10px 12px;
+    margin-top:8px; background:var(--panel); max-width:540px;}
+  .vs-upload-help{font-size:12.5px; color:#555; line-height:1.55; margin-bottom:8px;}
+  .vs-upload-help code{background:#eaeaea; padding:1px 5px; border-radius:3px;
+    font-family:ui-monospace,Consolas,monospace; font-size:12px;}
+  #vs-upload-file{font-size:13px; max-width:100%;}
+  .vs-upload-msg{font-size:12.5px; margin-top:8px; min-height:1em;}
+  .vs-upload-msg.err{color:var(--red); font-weight:600;}
+  .vs-upload-msg.ok{color:#2a7d2a;}
+  .vs-shift{display:inline-flex; gap:4px; align-items:center;}
+  .vs-shift button{font-family:ui-monospace,monospace; width:30px; padding:6px 0;}
+  /* control bar aligned under the plots: time-shift (left col), IQ mode
+     (center, under the IQ plot), freq-shift (right col). Pulled up tight to
+     the plots with a small negative margin. */
+  .vs-shiftbar{display:flex; justify-content:space-between; align-items:center;
+    width:100%; margin-top:-18px; margin-bottom:12px;}
+  .vs-shift-col{width:25%; justify-content:center;}
+  .vs-iqmode-col{width:50%; display:flex; justify-content:center; align-items:center; gap:8px;}
+  .vs-iqmode-col > label{font-size:13px; white-space:nowrap;}
+  .vs-slider{display:flex; flex-direction:column; gap:2px; font-size:12px;}
+  .vs-slider input{width:150px;}
+  .vs-sep{width:1px; align-self:stretch; background:var(--border);}
+  .vs-note{font-size:11px; color:#888; margin-top:8px;}
+  .vs-footer{
+    display:flex; align-items:center; justify-content:space-between;
+    gap:12px; margin-top:10px; padding-top:8px; border-top:1px solid var(--border);
+  }
+  .vs-footer .vs-foot-text{font-size:13px; color:#555;}
+  .vs-footer img.vs-logo{height:44px; width:auto; display:block;}
+  /* Narrow screens (phones): the canvas reflows to a stacked/portrait layout
+     (IQ on top, 2x2 strip-chart grid below) in JS at the same 700px breakpoint.
+     Here we un-align the control bar from the wide plot columns so it stacks
+     and centers instead of cramping. Purely additive — inert above 700px. */
+  @media (max-width:700px){
+    /* IQ Mode is moved out (to the mid slot), leaving Time shift + Freq shift as
+       a two-column row so each sits under its strip-chart column: Time shift
+       under the left (Time-Domain) column, Freq shift under the right (Freq). */
+    .vs-shiftbar{flex-direction:row; align-items:flex-start; gap:0;
+      margin-top:8px; margin-bottom:10px;}   /* remove the -18px tuck under wide plot cols */
+    .vs-shift-col{width:50%; justify-content:center;}
+    .vs-iqmode-col{width:100%; justify-content:center; flex-wrap:wrap;}
+    /* strip charts get their own canvas on mobile; the IQ Mode selector (moved
+       here by JS) sits in the gap between the IQ plot and the charts */
+    #vs-canvas2-wrap{display:block;}
+    .vs-midbar{display:flex; justify-content:center; align-items:center;
+      gap:8px; margin:10px 0;}
+    .vs-title{display:block; text-align:center; font-weight:700;
+      font-size:22px; margin:4px 0 10px;}   /* VectorSpin title at the top */
+    .vs-row{gap:10px 16px;}
+    #vs-input{min-width:0; width:100%;}       /* was min-width:260px -> horizontal overflow */
+    .vs-field{flex-wrap:wrap; min-width:0 !important;} /* let the input field wrap */
+    .vs-slider{flex:1 1 140px; order:1;}
+    .vs-slider input{width:100%;}             /* was fixed 150px */
+    /* Dissolve the two action rows into one flex context, then lay the buttons
+       out as: Download GIF hard-left, Start/Stop + Clear grouped hard-right. */
+    .vs-actions{display:flex; flex-wrap:wrap; align-items:flex-end; gap:10px 16px;}
+    .vs-actions > .vs-row{display:contents;}
+    .vs-sep{display:none;}                     /* separator makes no sense once wrapped */
+    .vs-actions::after{content:""; flex-basis:100%; height:0; order:2;} /* break: sliders above */
+    #vs-savegif{order:3;}                      /* Download GIF: far left of the button line */
+    .vs-actions .vs-field{order:4;}            /* Start/Stop + Clear: pushed right (inline margin-left:auto) */
+    #vs-gif-status{order:5; flex-basis:100%;}  /* GIF status text on its own line below */
+  }

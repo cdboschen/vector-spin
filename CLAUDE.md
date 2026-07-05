@@ -11,10 +11,12 @@ frequency-domain magnitude/phase strip charts around a central IQ (complex-plane
 
 There are two independent implementations of the same idea:
 
-- **`vector_spin.html`** — a self-contained browser app (HTML/CSS/vanilla JS on a `<canvas>`),
-  **no dependencies and no build step**. This is the version embedded on the website
-  (dsp-coach.com) via an `<iframe>`. It can export the animation as an animated GIF entirely
-  client-side.
+- **`vector_spin.html` + `vector_spin.css` + `vector_spin.js`** — a browser app (vanilla JS on
+  a `<canvas>`), **no dependencies and no build step** (the HTML just `<link>`s the CSS and
+  `<script src>`s the JS; all three are plain static files served together). This is the version
+  embedded on the website (dsp-coach.com) via an `<iframe>`. It can export the animation as an
+  animated GIF entirely client-side, upload IQ data as a two-column CSV, and load sample CSVs
+  from `samples/`.
 - **`vector_spin.py`** — the original Matplotlib desktop app (opens a Qt window). Same model,
   rendered with Matplotlib widgets.
 
@@ -54,9 +56,10 @@ needs ffmpeg on PATH.
 - `tshift` / `fshift` — integer index offsets applied as linear phase ramps, used to show
   non-causal / circularly-shifted reconstructions.
 
-## Architecture — `vector_spin.html`
+## Architecture — `vector_spin.html` / `.css` / `.js`
 
-One file, organized into commented sections:
+Markup in `vector_spin.html`, styles in `vector_spin.css`, and the whole app in
+`vector_spin.js` (the big IIFE). The JS is organized into commented sections:
 
 1. **Complex + DSP math** — small complex helpers plus naive DFT/IDFT (replaces numpy/scipy).
 2. **Input parser** — a hand-written recursive-descent parser (`parseInput`). Accepts a
