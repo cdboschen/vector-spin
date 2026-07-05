@@ -851,10 +851,12 @@ function drawIqPlot(){
   const pts = PD.iq.points;
   drawMarkers(mp, pts.map(v=>v.re), pts.map(v=>v.im), PD.iq.marker[0], PD.iq.marker[1]);
   unclip();
-  // copyright, small and unobtrusive, along the bottom of the IQ plot
+  // copyright, small and unobtrusive, along the bottom of the IQ plot. In the GIF
+  // export it is drawn solid (full opacity) so the text stays crisp and legible
+  // after colour quantization rather than a faint, dithered grey.
   ctx.save();
-  ctx.fillStyle = 'rgba(90,90,90,0.55)';
-  ctx.font = '11px sans-serif';
+  ctx.fillStyle = gifExporting ? 'rgb(60,60,60)' : 'rgba(90,90,90,0.55)';
+  ctx.font = (gifExporting ? 'bold 11px' : '11px') + ' sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'bottom';
   ctx.fillText('© The DSP Coach 2026  VectorSpin', mp.ix + mp.iw/2, mp.iy + mp.ih - 5);
@@ -1142,10 +1144,10 @@ function assembleGif(width, height, palette, frames, delayCs){
   return out;
 }
 
-let gifBusy = false;
+let gifBusy = false, gifExporting = false;
 async function saveGif(){
   if(gifBusy || vs.tvalues.length===0) return;
-  gifBusy = true;
+  gifBusy = true; gifExporting = true;
   const btn = el('vs-savegif'), status = el('vs-gif-status');
   const wasRunning = anim.running; stopAnim(); btn.disabled = true;
   const yield_ = ()=> new Promise(r=>setTimeout(r,0));
@@ -1158,17 +1160,37 @@ async function saveGif(){
     // canvas at the export size and scale the drawing transform to match, so the
     // whole scene is re-rasterised at 1620x837 (true supersampling, not an upscale).
     const SS = 1.5;
-    const GW = Math.round(CW*SS), GH = Math.round(CH*SS);
     const SIZE_CEIL = 5*1024*1024, TARGET = Math.round(SIZE_CEIL*0.94);
+    // A footer band (attribution URL + DSP Coach logo) is baked below the plots
+    // so the shared GIF carries branding. FH is extra logical height for it.
+    const logo = document.querySelector('img.vs-logo');
+    const footText = (document.querySelector('.vs-foot-text') || {}).textContent || 'VectorSpin  https://dsp-coach.com';
+    const FH = 46;
+    const GW = Math.round(CW*SS), GH = Math.round((CH+FH)*SS);
     canvas.width = GW; canvas.height = GH;
     ctx1.setTransform(SS,0,0,SS,0,0);
+
+    const drawFooter = ()=>{
+      const c = ctx1;
+      c.fillStyle = '#fff'; c.fillRect(0, CH, CW, FH);        // footer background
+      c.strokeStyle = '#ccc'; c.lineWidth = 1;                // divider line
+      c.beginPath(); c.moveTo(PAD, CH+0.5); c.lineTo(CW-PAD, CH+0.5); c.stroke();
+      const midY = CH + FH/2;
+      if(logo && logo.complete && logo.naturalWidth){         // logo, right-aligned
+        const LH = 34, LW = LH * logo.naturalWidth/logo.naturalHeight;
+        c.drawImage(logo, CW-PAD-LW, midY-LH/2, LW, LH);
+      }
+      c.fillStyle = '#444'; c.font = '16px sans-serif';       // attribution, left
+      c.textAlign = 'left'; c.textBaseline = 'middle';
+      c.fillText(footText, PAD, midY+1);
+    };
 
     const totalSteps = vs.nsamps;
     // Render is deterministic, so we run the animation more than once rather than
     // holding every full-res frame in memory. warmup() replays one revolution so
     // the fading trace loops seamlessly; frameData() renders + reads one frame.
     const warmup = ()=>{ armAnimation(); for(let i=0;i<totalSteps;i++) step(); };
-    const frameData = ()=>{ render(); return ctx1.getImageData(0,0,GW,GH); };
+    const frameData = ()=>{ render(); drawFooter(); return ctx1.getImageData(0,0,GW,GH); };
     const indexFrame = (data)=>{
       const idx = new Uint8Array(GW*GH);
       for(let p=0,q=0; q<idx.length; p+=4,q++) idx[q] = nearest(data[p],data[p+1],data[p+2]);
@@ -1240,7 +1262,7 @@ async function saveGif(){
   } catch(err){
     status.textContent = 'GIF export failed: ' + err.message;
   } finally {
-    btn.disabled = false; gifBusy = false;
+    btn.disabled = false; gifBusy = false; gifExporting = false;
     // restore the on-screen layout (stacked on phones) before repainting
     computeLayout(prevMode); applyCanvasSize(); placeIqMode(prevMode); _lastKey = '';
     armAnimation();
