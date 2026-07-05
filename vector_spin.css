@@ -35,6 +35,8 @@
   /* CSV upload for IQ data */
   .vs-upload-block{margin:6px 0 4px;}
   .vs-samples-list{display:flex; flex-direction:column; gap:6px; margin-bottom:2px;}
+  .vs-samples-save{display:inline-flex; align-items:center; gap:6px; font-size:13px;
+    color:var(--ink); margin-bottom:8px; cursor:pointer;}
   .vs-sample-item{display:inline-flex; align-items:baseline; gap:8px; text-align:left;
     background:#fff; border:1px solid var(--border); border-radius:4px; padding:6px 10px;
     cursor:pointer; font-size:13px; color:var(--ink); font-family:inherit; width:fit-content;

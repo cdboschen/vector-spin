@@ -1275,8 +1275,8 @@ const SAMPLES = [
     list.appendChild(b);
   }
 })();
-// Clicking a sample: fetch it, load its array into the Input Array, AND download
-// the CSV to disk as an example of the format; then close the panel.
+// Clicking a sample: fetch it, load its array into the Input Array, and — only if
+// the "Save CSV to disk" checkbox is ticked — download the CSV; then close the panel.
 function loadSample(s){
   const msg = el('vs-samples-msg');
   msg.className = 'vs-upload-msg'; msg.textContent = 'Loading…';
@@ -1286,9 +1286,12 @@ function loadSample(s){
       const arr = parseCsvIQ(text);
       inputEl.value = arr.map(fmtComplex).join(', ');   // auto-load into the input
       applyInput();
-      const a = document.createElement('a');            // also save the CSV to disk
-      a.href = s.file; a.download = s.file.split('/').pop();
-      document.body.appendChild(a); a.click(); a.remove();
+      const save = el('vs-samples-save');
+      if(save && save.checked){                         // optionally save the CSV to disk
+        const a = document.createElement('a');
+        a.href = s.file; a.download = s.file.split('/').pop();
+        document.body.appendChild(a); a.click(); a.remove();
+      }
       closeSamplesPanel();
     })
     .catch(err=>{ msg.className = 'vs-upload-msg err'; msg.textContent = 'Could not load sample: ' + err.message; });

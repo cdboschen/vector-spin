@@ -75,7 +75,7 @@ examples: 1, 2+3j, 3&nbsp;&nbsp;or&nbsp;&nbsp;[1,1,1,1,1]</div>
          Moves with the input block on mobile (see placeInputBlock). -->
     <div class="vs-upload-block" id="vs-upload-block">
       <button class="vs-btn" id="vs-upload-btn">Upload CSV…</button>
-      <button class="vs-btn" id="vs-samples-btn">Load Samples</button>
+      <button class="vs-btn" id="vs-samples-btn">Examples</button>
       <div class="vs-upload-panel" id="vs-upload-panel" style="display:none;">
         <div class="vs-upload-help">
           Upload IQ data as a <b>two-column CSV</b>: <code>real, imag</code> — one complex
@@ -87,12 +87,8 @@ examples: 1, 2+3j, 3&nbsp;&nbsp;or&nbsp;&nbsp;[1,1,1,1,1]</div>
         <div class="vs-upload-msg" id="vs-upload-msg"></div>
       </div>
       <div class="vs-upload-panel" id="vs-samples-panel" style="display:none;">
-        <div class="vs-upload-help">
-          Pick a sample below — its array is <b>always loaded into the Input Array</b> so you
-          see it right away. Your browser also offers to <b>save the CSV to disk</b> as an
-          example of the two-column <code>real, imag</code> format; saving is optional — just
-          cancel if you don't need the file.
-        </div>
+        <div class="vs-upload-help">Explore example arrays below.</div>
+        <label class="vs-samples-save"><input type="checkbox" id="vs-samples-save"> Save CSV to disk</label>
         <div class="vs-samples-list" id="vs-samples-list"><!-- filled from JS SAMPLES --></div>
         <div class="vs-upload-msg" id="vs-samples-msg"></div>
       </div>
