@@ -692,7 +692,7 @@ function drawIqPlot(){
   ctx.font = (gifExporting ? 'bold 11px' : '11px') + ' sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'bottom';
-  ctx.fillText('© The DSP Coach 2026  VectorSpin', mp.ix + mp.iw/2, mp.iy + mp.ih - 5);
+  ctx.fillText('VectorSpin © 2026 The DSP Coach', mp.ix + mp.iw/2, mp.iy + mp.ih - 5);
   ctx.restore();
 }
 

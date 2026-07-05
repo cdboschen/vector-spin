@@ -9,7 +9,7 @@ Updated December 2024 for compatibility with current Matplotlib versions
 MIT License
 SPDX-License-Identifier: MIT
 
-Copyright (c) 2023 The DSP Coach (https://dsp-coach.com)
+VectorSpin © 2026 The DSP Coach (https://dsp-coach.com)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of the software (the "Software"), to deal in the Software without restriction,

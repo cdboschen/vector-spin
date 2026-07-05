@@ -21,7 +21,7 @@ There are two independent implementations of the same idea:
   rendered with Matplotlib widgets.
 
 This is a personal/educational project: no test suite, no packaging. Licensed MIT,
-© The DSP Coach (see `LICENSE`).
+VectorSpin © 2026 The DSP Coach (see `LICENSE`).
 
 ## Running
 

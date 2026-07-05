@@ -1,5 +1,5 @@
 # VectorSpin — conda environment
-# Copyright (c) 2026 The DSP Coach (https://dsp-coach.com). MIT License. SPDX-License-Identifier: MIT
+# VectorSpin © 2026 The DSP Coach (https://dsp-coach.com). MIT License. SPDX-License-Identifier: MIT
 name: vectorspin
 channels:
   - conda-forge

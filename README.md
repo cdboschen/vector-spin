@@ -43,4 +43,4 @@ host resizes automatically.
 
 ## License
 
-MIT — see [LICENSE](LICENSE). © 2026 The DSP Coach.
+MIT — see [LICENSE](LICENSE). VectorSpin © 2026 The DSP Coach.
