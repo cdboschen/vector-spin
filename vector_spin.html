@@ -26,6 +26,7 @@
   #vs-canvas, #vs-canvas2{width:100%; height:auto; display:block; background:#fff;}
   #vs-canvas2-wrap{display:none;}           /* strip-chart canvas: mobile only */
   .vs-midbar{}                               /* empty/collapsed on desktop */
+  .vs-title{display:none;}                    /* page title: mobile only */
   .vs-controls{margin-top:0;}
   .vs-row{display:flex; flex-wrap:wrap; gap:14px 22px; align-items:center; margin:8px 0;}
   .vs-field{display:flex; align-items:center; gap:8px;}
@@ -82,6 +83,8 @@
     #vs-canvas2-wrap{display:block;}
     .vs-midbar{display:flex; justify-content:center; align-items:center;
       gap:8px; margin:10px 0;}
+    .vs-title{display:block; text-align:center; font-weight:700;
+      font-size:22px; margin:4px 0 10px;}   /* VectorSpin title at the top */
     .vs-row{gap:10px 16px;}
     #vs-input{min-width:0; width:100%;}       /* was min-width:260px -> horizontal overflow */
     .vs-field{flex-wrap:wrap; min-width:0 !important;} /* let the input field wrap */
@@ -101,6 +104,8 @@
 </head>
 <body>
 <div class="vs-root">
+  <!-- Mobile-only page title (hidden on desktop, which has no room / doesn't need it) -->
+  <div class="vs-title" id="vs-title">VectorSpin</div>
   <div class="vs-canvas-wrap">
     <canvas id="vs-canvas" width="1080" height="558"></canvas>
   </div>
@@ -666,8 +671,10 @@ function placeInputBlock(mode){
   if(!desc || !row || !root) return;
   if(!_inpHome){ _inpHome = desc.parentElement; _inpAnchor = row.nextElementSibling; }
   if(mode === 'stacked'){
-    root.insertBefore(desc, root.firstChild);   // help text first
-    root.insertBefore(row, desc.nextSibling);   // then the input row, still above the IQ plot
+    const title = document.getElementById('vs-title');   // keep the title on top
+    const anchor = (title && title.parentElement===root) ? title.nextSibling : root.firstChild;
+    root.insertBefore(desc, anchor);             // help text just under the title
+    root.insertBefore(row, desc.nextSibling);    // then the input row, still above the IQ plot
   } else if(desc.parentElement !== _inpHome){
     _inpHome.insertBefore(desc, _inpAnchor);    // restore: desc, then row, before their old anchor
     _inpHome.insertBefore(row, _inpAnchor);
