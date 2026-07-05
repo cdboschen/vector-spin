@@ -1472,6 +1472,7 @@ const SAMPLES = [
   { file:'samples/halfband_17_kaiser12.csv', label:'Half-band low-pass filter', note:'17 taps · Kaiser β=12' },
   { file:'samples/hilbert_31_kaiser8.csv',   label:'Hilbert transformer',        note:'31 taps · 2/n · Kaiser β=8' },
   { file:'samples/fft_vector_spin.csv',      label:'Clock face',                 note:'the original “eye” · 5 bins · spins clockwise' },
+  { file:'samples/pi_filter.csv',            label:'Pi-Filter',                  note:'165-tap FIR · Kaiser β=8 · set IQ Mode→Freq to draw π' },
 ];
 (function buildSamplesList(){
   const list = el('vs-samples-list');
