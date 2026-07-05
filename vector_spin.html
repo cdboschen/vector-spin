@@ -23,7 +23,9 @@
     color:var(--ink); max-width:1100px; margin:0 auto; padding:8px;
   }
   .vs-canvas-wrap{width:100%;}
-  #vs-canvas{width:100%; height:auto; display:block; background:#fff;}
+  #vs-canvas, #vs-canvas2{width:100%; height:auto; display:block; background:#fff;}
+  #vs-canvas2-wrap{display:none;}           /* strip-chart canvas: mobile only */
+  .vs-midbar{}                               /* empty/collapsed on desktop */
   .vs-controls{margin-top:0;}
   .vs-row{display:flex; flex-wrap:wrap; gap:14px 22px; align-items:center; margin:8px 0;}
   .vs-field{display:flex; align-items:center; gap:8px;}
@@ -71,7 +73,12 @@
     .vs-shiftbar{flex-direction:column; align-items:stretch; gap:10px;
       margin-top:8px; margin-bottom:10px;}   /* remove the -18px tuck under wide plot cols */
     .vs-shift-col, .vs-iqmode-col{width:100%; justify-content:center;}
-    .vs-iqmode-col{flex-wrap:wrap; order:-1;} /* IQ Mode first — right under the IQ plot */
+    .vs-iqmode-col{flex-wrap:wrap;}
+    /* strip charts get their own canvas on mobile; the IQ Mode selector (moved
+       here by JS) sits in the gap between the IQ plot and the charts */
+    #vs-canvas2-wrap{display:block;}
+    .vs-midbar{display:flex; justify-content:center; align-items:center;
+      gap:8px; margin:10px 0;}
     .vs-row{gap:10px 16px;}
     #vs-input{min-width:0; width:100%;}       /* was min-width:260px -> horizontal overflow */
     .vs-field{flex-wrap:wrap; min-width:0 !important;} /* let the input field wrap */
@@ -93,6 +100,17 @@
 <div class="vs-root">
   <div class="vs-canvas-wrap">
     <canvas id="vs-canvas" width="1080" height="558"></canvas>
+  </div>
+
+  <!-- Mobile-only slot: on narrow screens the IQ Mode selector is moved here
+       (via JS) so it sits between the IQ plot and the strip charts. Empty (and
+       collapsed) on desktop. -->
+  <div id="vs-midbar" class="vs-midbar"></div>
+
+  <!-- Strip charts in the stacked (mobile) layout. display:none on desktop,
+       where everything renders on the main canvas above. -->
+  <div class="vs-canvas-wrap" id="vs-canvas2-wrap">
+    <canvas id="vs-canvas2" width="10" height="10"></canvas>
   </div>
 
   <!-- control bar aligned under the plots: time-shift (left), IQ mode (center,
@@ -525,7 +543,15 @@ function stopAnim(){ anim.running = false; }
 // 4. Renderer (replaces matplotlib axes)
 // ---------------------------------------------------------------------------
 const canvas = document.getElementById('vs-canvas');
-const ctx = canvas.getContext('2d');
+// Second canvas holds the strip charts in the stacked (mobile) layout so the IQ
+// Mode selector can sit in the DOM gap between the IQ plot and the charts. On
+// desktop it is display:none and unused (everything renders on the main canvas).
+const canvas2 = document.getElementById('vs-canvas2');
+const ctx1 = canvas.getContext('2d');
+const ctx2 = canvas2.getContext('2d');
+// `ctx` is the *current* draw target; render() points it at ctx1 (IQ / everything
+// on desktop) or ctx2 (strip charts, stacked only). All draw helpers use it.
+let ctx = ctx1;
 
 // shared plot margins (used for layout + mapping) — mode-independent
 const MARGIN = {left:44, right:12, top:22, bottom:32};
@@ -536,8 +562,9 @@ const sideGap = 12;
 // size (CW/CH) and all plot rectangles are reassignable: on wide screens they
 // reproduce today's exact 1080x558 desktop layout; on narrow screens they reflow
 // to a stacked/portrait arrangement. Variable names are unchanged so the render
-// functions below keep referencing them directly.
-let CW, CH, areaW, areaH, colW, iqRect, iqInnerW, iqInnerH,
+// functions below keep referencing them directly. CW2/CH2 size the second
+// (strip-chart) canvas in stacked mode.
+let CW, CH, CW2, CH2, areaW, areaH, colW, iqRect, iqInnerW, iqInnerH,
     iqSquare, iqSqTop, sideH, iqDrawRect, rects;
 let layoutMode = 'wide';
 
@@ -574,22 +601,24 @@ function computeLayout(mode){
     };
     return;
   }
-  // ---- stacked (phone/portrait): IQ square on top, 2x2 strip grid below ----
+  // ---- stacked (phone/portrait): IQ square on canvas 1, 2x2 strip grid on
+  // canvas 2, with the IQ Mode selector living in the DOM gap between them. ----
   const wrapW = (canvas.parentElement && canvas.parentElement.clientWidth) || 360;
   CW = Math.round(clampw(wrapW, 340, 560));   // logical ~= display px -> legible fonts
+  CW2 = CW;
   const iqRectW = CW - 2*PAD;
   iqInnerW = iqRectW - MARGIN.left - MARGIN.right;
   iqSquare = iqInnerW;                          // equal-aspect square fills the width
   iqInnerH = iqSquare;
   iqSqTop  = PAD + MARGIN.top;                  // no vertical centering offset
   iqDrawRect = {x:PAD, y:PAD, w:iqRectW, h:iqSquare + MARGIN.top + MARGIN.bottom};
-  // 2x2 grid of strip charts under the IQ plot
-  const sectionGap = 16, colGap = 10, rowGap = 14;
+  CH = iqDrawRect.y + iqDrawRect.h + PAD;       // canvas 1: just the IQ plot
+  // 2x2 grid of strip charts on canvas 2 (its own coordinate space, y from PAD)
+  const colGap = 10, rowGap = 14;
   const gridColW = (CW - 2*PAD - colGap)/2;
   const rowH = Math.round(clampw(gridColW*0.62, 130, 180));
-  const gridTop = iqDrawRect.y + iqDrawRect.h + sectionGap;
   const leftX = PAD, rightX = PAD + gridColW + colGap;
-  const row1Y = gridTop, row2Y = gridTop + rowH + rowGap;
+  const row1Y = PAD, row2Y = PAD + rowH + rowGap;
   rects = {
     time_mag:   {x:leftX,  y:row1Y, w:gridColW, h:rowH},
     freq_mag:   {x:rightX, y:row1Y, w:gridColW, h:rowH},
@@ -597,8 +626,24 @@ function computeLayout(mode){
     time_phase: {x:leftX,  y:row2Y, w:gridColW, h:rowH},
     freq_phase: {x:rightX, y:row2Y, w:gridColW, h:rowH},
   };
-  CH = row2Y + rowH + PAD;
+  CH2 = row2Y + rowH + PAD;                      // canvas 2: the strip grid
   // areaW/areaH/colW/sideH are read only by the wide path; left stale here.
+}
+
+// Move the single IQ Mode selector between its desktop home (centre of the shift
+// bar, under the IQ plot) and the mobile slot between the two canvases. One live
+// element, so its radios + listeners move with it.
+let _iqHome = null, _iqAnchor = null;
+function placeIqMode(mode){
+  const col = document.querySelector('.vs-iqmode-col');
+  const mid = document.getElementById('vs-midbar');
+  if(!col || !mid) return;
+  if(!_iqHome){ _iqHome = col.parentElement; _iqAnchor = col.nextElementSibling; }
+  if(mode === 'stacked'){
+    if(col.parentElement !== mid) mid.appendChild(col);
+  } else if(col.parentElement !== _iqHome){
+    _iqHome.insertBefore(col, _iqAnchor);
+  }
 }
 
 // (Re)size the backing store for crisp HiDPI rendering. Idempotent across
@@ -608,11 +653,18 @@ function applyCanvasSize(){
   canvas.width  = Math.round(CW*dpr);
   canvas.height = Math.round(CH*dpr);
   canvas.style.width = '100%';
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx1.setTransform(dpr, 0, 0, dpr, 0, 0);
+  if(layoutMode === 'stacked'){
+    canvas2.width  = Math.round(CW2*dpr);
+    canvas2.height = Math.round(CH2*dpr);
+    canvas2.style.width = '100%';
+    ctx2.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
 }
 
 computeLayout(currentMode());
 applyCanvasSize();
+placeIqMode(layoutMode);
 
 function niceTicks(min, max, count){
   const span = max - min;
@@ -882,31 +934,51 @@ function drawArrow(){
 }
 
 function render(){
-  ctx.clearRect(0,0,CW,CH);
-  ctx.fillStyle = '#fff'; ctx.fillRect(0,0,CW,CH);
-  drawGroupBox();   // subtle shade behind the plots being transformed
+  const twoCanvas = (layoutMode === 'stacked');
+  // strip charts go on canvas 2 in stacked mode, else share the main canvas
+  const stripCtx = twoCanvas ? ctx2 : ctx1;
+
+  // clear main canvas (and the strip canvas when split)
+  ctx = ctx1;
+  ctx.clearRect(0,0,CW,CH); ctx.fillStyle = '#fff'; ctx.fillRect(0,0,CW,CH);
+  if(twoCanvas){
+    ctx = ctx2;
+    ctx.clearRect(0,0,CW2,CH2); ctx.fillStyle = '#fff'; ctx.fillRect(0,0,CW2,CH2);
+  }
+
+  ctx = ctx1;
+  drawGroupBox();   // subtle shade behind the plots being transformed (wide only)
 
   if(!PD){
     // empty axes
     const magWord = layoutMode==='stacked' ? 'Mag' : 'Magnitude';
+    ctx = stripCtx;
     mappers.time_mag  = makeMapper(rects.time_mag,  [0,1],[0,1], {title:'Time-Domain: '+magWord});
     mappers.time_phase= makeMapper(rects.time_phase,[0,1],[-Math.PI,Math.PI], {title:'Time-Domain: Phase', xlabel:'Time Index n', ylabel:'Radians'});
     mappers.freq_mag  = makeMapper(rects.freq_mag,  [0,1],[0,1], {title:'Freq-Domain: '+magWord});
     mappers.freq_phase= makeMapper(rects.freq_phase,[0,1],[-Math.PI,Math.PI], {title:'Freq-Domain: Phase', xlabel:'Frequency Index k', ylabel:'Radians'});
     drawAxes(mappers.time_mag); drawAxes(mappers.time_phase);
     drawAxes(mappers.freq_mag); drawAxes(mappers.freq_phase);
+    ctx = ctx1;
     drawIqPlot();
     drawArrow();
     return;
   }
 
+  // ---- strip charts (+ their history dots) on stripCtx ----
+  ctx = stripCtx;
   drawStripPlot('time_mag',  'time', true);
   drawStripPlot('time_phase','time', false);
   drawStripPlot('freq_mag',  'freq', true);
   drawStripPlot('freq_phase','freq', false);
-  drawIqPlot();
+  const magPlot = mappers[PD.historyTarget==='time' ? 'time_mag'  : 'freq_mag'];
+  const phPlot  = mappers[PD.historyTarget==='time' ? 'time_phase': 'freq_phase'];
+  if(magPlot){ clip(magPlot); drawDots(magPlot, anim.histTx, anim.histMag, vs.history_color, 1.4); unclip(); }
+  if(phPlot){  clip(phPlot);  drawDots(phPlot,  anim.histTx, anim.histPh,  vs.history_color, 1.4); unclip(); }
 
-  // ---- dynamic overlays ----
+  // ---- IQ plot (+ dynamic overlays) on the main canvas ----
+  ctx = ctx1;
+  drawIqPlot();
   // IQ phasor chain (green) + tip trace (blue)
   const iq = mappers.iq;
   clip(iq);
@@ -919,12 +991,6 @@ function render(){
   if(anim.chainX.length) drawDots(iq, [anim.chainX[0]], [anim.chainY[0]], vs.phasor_color, 3.15);  // origin stays green
   drawDots(iq, anim.histX, anim.histY, vs.history_color, 1.4);
   unclip();
-
-  // strip-chart history dots on the target-domain plots
-  const magPlot = mappers[PD.historyTarget==='time' ? 'time_mag'  : 'freq_mag'];
-  const phPlot  = mappers[PD.historyTarget==='time' ? 'time_phase': 'freq_phase'];
-  if(magPlot){ clip(magPlot); drawDots(magPlot, anim.histTx, anim.histMag, vs.history_color, 1.4); unclip(); }
-  if(phPlot){  clip(phPlot);  drawDots(phPlot,  anim.histTx, anim.histPh,  vs.history_color, 1.4); unclip(); }
 
   drawArrow();
 }
@@ -1110,7 +1176,7 @@ async function saveGif(){
   } finally {
     btn.disabled = false; gifBusy = false;
     // restore the on-screen layout (stacked on phones) before repainting
-    computeLayout(prevMode); applyCanvasSize(); _lastKey = '';
+    computeLayout(prevMode); applyCanvasSize(); placeIqMode(prevMode); _lastKey = '';
     armAnimation();
     if(wasRunning) startAnim(); else render();
   }
@@ -1222,7 +1288,7 @@ function scheduleRelayout(){
     const key = mode + ':' + (mode==='wide' ? '1080' : Math.round(clampw(wrapW,340,560)));
     if(key === _lastKey) return;
     _lastKey = key;
-    computeLayout(mode); applyCanvasSize();
+    computeLayout(mode); applyCanvasSize(); placeIqMode(mode);
     if(!anim.running) render();
   });
 }
