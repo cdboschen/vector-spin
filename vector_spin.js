@@ -997,6 +997,7 @@ async function saveGif(){
   if(gifBusy || vs.tvalues.length===0) return;
   gifBusy = true; gifExporting = true;
   const btn = el('vs-savegif'), status = el('vs-gif-status');
+  const hiRes = !!(el('vs-hires') && el('vs-hires').checked);   // full-res + every frame
   const wasRunning = anim.running; stopAnim(); btn.disabled = true;
   const yield_ = ()=> new Promise(r=>setTimeout(r,0));
   // Always export the wide 1080x558 layout so phone users still get the full
@@ -1007,8 +1008,10 @@ async function saveGif(){
     // Render the vectors at 1.5x resolution for crisp lines/text: point the main
     // canvas at the export size and scale the drawing transform to match, so the
     // whole scene is re-rasterised at 1620x837 (true supersampling, not an upscale).
-    const SS = 1.5;
-    const SIZE_CEIL = 5*1024*1024, TARGET = Math.round(SIZE_CEIL*0.94);
+    // High-res: supersample harder and lift the file-size ceiling so nothing is
+    // trimmed. Standard: 1.5x + a 5 MB budget so the GIF stays shareable.
+    const SS = hiRes ? 2 : 1.5;
+    const SIZE_CEIL = hiRes ? Infinity : 5*1024*1024, TARGET = Math.round((hiRes ? 200*1024*1024 : SIZE_CEIL)*0.94);
     // A footer band (attribution URL + DSP Coach logo) is baked below the plots
     // so the shared GIF carries branding. FH is extra logical height for it.
     const logo = document.querySelector('img.vs-logo');
@@ -1070,8 +1073,10 @@ async function saveGif(){
     const avgFrame = samples.length ? measBytes/samples.length : 70000;
     // pick the frame count: as many as the slider asks, capped to fit the 5 MB
     // ceiling (and a memory backstop). Fewer frames -> larger per-frame delay.
+    // High-res uses every frame the slider asks for (stride 1, smoothest motion);
+    // standard fits the 5 MB budget and caps at 300 frames.
     const budgetFrames = Math.max(2, Math.floor((TARGET - 800) / avgFrame));
-    const finalFrames = Math.min(totalSteps, budgetFrames, 300);
+    const finalFrames = hiRes ? totalSteps : Math.min(totalSteps, budgetFrames, 300);
     const stride = Math.max(1, Math.round(totalSteps/finalFrames));
 
     // ---- pass 2: render + index the chosen frames ----
