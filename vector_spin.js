@@ -1391,8 +1391,8 @@ function setIqMode(mode){
 }
 
 function updateShiftLabels(){
-  el('vs-tshift-lbl').textContent = vs.tshift;
-  el('vs-fshift-lbl').textContent = vs.fshift;
+  el('vs-tshift-lbl').value = vs.tshift;
+  el('vs-fshift-lbl').value = vs.fshift;
 }
 
 function setTshift(v){
@@ -1472,7 +1472,7 @@ const SAMPLES = [
   { file:'samples/halfband_17_kaiser12.csv', label:'Half-band low-pass filter', note:'17 taps · Kaiser β=12' },
   { file:'samples/hilbert_31_kaiser8.csv',   label:'Hilbert transformer',        note:'31 taps · 2/n · Kaiser β=8' },
   { file:'samples/fft_vector_spin.csv',      label:'Clock face',                 note:'the original “eye” · 5 bins · spins clockwise' },
-  { file:'samples/pi_filter.csv',            label:'Pi-Filter',                  note:'165-tap FIR · Kaiser β=8 · set IQ Mode→Freq to draw π' },
+  { file:'samples/pi_filter.csv',            label:'Pi-Filter',                  note:'165-tap FIR · IQ Mode→Freq + Time shift −82 draws π' },
 ];
 (function buildSamplesList(){
   const list = el('vs-samples-list');
@@ -1520,6 +1520,9 @@ el('vs-tplus').addEventListener('click', ()=> setTshift(vs.tshift+1));
 el('vs-tminus').addEventListener('click',()=> setTshift(vs.tshift-1));
 el('vs-fplus').addEventListener('click', ()=> setFshift(vs.fshift+1));
 el('vs-fminus').addEventListener('click',()=> setFshift(vs.fshift-1));
+// typed shift values (e.g. -82 to centre a 165-tap filter's taps)
+el('vs-tshift-lbl').addEventListener('change', e=>{ const v=parseInt(e.target.value,10); if(Number.isFinite(v)) setTshift(v); else updateShiftLabels(); });
+el('vs-fshift-lbl').addEventListener('change', e=>{ const v=parseInt(e.target.value,10); if(Number.isFinite(v)) setFshift(v); else updateShiftLabels(); });
 
 el('vs-time').addEventListener('input', e=>{
   vs.refresh = +e.target.value; el('vs-time-val').textContent = e.target.value;
