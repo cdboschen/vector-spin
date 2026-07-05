@@ -1261,7 +1261,7 @@ el('vs-upload-file').addEventListener('change', e=>{
 const SAMPLES = [
   { file:'samples/halfband_17_kaiser12.csv', label:'Half-band low-pass filter', note:'17 taps · Kaiser β=12' },
   { file:'samples/hilbert_31_kaiser8.csv',   label:'Hilbert transformer',        note:'31 taps · 2/n · Kaiser β=8' },
-  { file:'samples/fft_clock.csv',            label:'Clock face (ellipse)',       note:'12 hour markers · vertical 1.5× width' },
+  { file:'samples/fft_clock.csv',            label:'Clock face (5-bin FFT)',     note:'12 hour markers · 3 & 9 pulled out → 5 bins' },
 ];
 (function buildSamplesList(){
   const list = el('vs-samples-list');
