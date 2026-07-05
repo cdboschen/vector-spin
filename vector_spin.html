@@ -71,18 +71,21 @@
     .vs-shiftbar{flex-direction:column; align-items:stretch; gap:10px;
       margin-top:8px; margin-bottom:10px;}   /* remove the -18px tuck under wide plot cols */
     .vs-shift-col, .vs-iqmode-col{width:100%; justify-content:center;}
-    .vs-iqmode-col{flex-wrap:wrap;}
+    .vs-iqmode-col{flex-wrap:wrap; order:-1;} /* IQ Mode first — right under the IQ plot */
     .vs-row{gap:10px 16px;}
     #vs-input{min-width:0; width:100%;}       /* was min-width:260px -> horizontal overflow */
-    .vs-field{flex-wrap:wrap; min-width:0 !important;
-      margin-left:0 !important;}              /* don't right-push Start/Stop+Clear */
-    .vs-slider{flex:1 1 140px;}
+    .vs-field{flex-wrap:wrap; min-width:0 !important;} /* let the input field wrap */
+    .vs-slider{flex:1 1 140px; order:1;}
     .vs-slider input{width:100%;}             /* was fixed 150px */
-    /* Dissolve the two action rows so Start/Stop, Clear and Download GIF flow
-       onto one left-aligned line together. */
+    /* Dissolve the two action rows into one flex context, then lay the buttons
+       out as: Download GIF hard-left, Start/Stop + Clear grouped hard-right. */
     .vs-actions{display:flex; flex-wrap:wrap; align-items:flex-end; gap:10px 16px;}
     .vs-actions > .vs-row{display:contents;}
     .vs-sep{display:none;}                     /* separator makes no sense once wrapped */
+    .vs-actions::after{content:""; flex-basis:100%; height:0; order:2;} /* break: sliders above */
+    #vs-savegif{order:3;}                      /* Download GIF: far left of the button line */
+    .vs-actions .vs-field{order:4;}            /* Start/Stop + Clear: pushed right (inline margin-left:auto) */
+    #vs-gif-status{order:5; flex-basis:100%;}  /* GIF status text on its own line below */
   }
 </style>
 </head>
