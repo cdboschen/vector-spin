@@ -70,10 +70,13 @@
      Here we un-align the control bar from the wide plot columns so it stacks
      and centers instead of cramping. Purely additive — inert above 700px. */
   @media (max-width:700px){
-    .vs-shiftbar{flex-direction:column; align-items:stretch; gap:10px;
+    /* IQ Mode is moved out (to the mid slot), leaving Time shift + Freq shift as
+       a two-column row so each sits under its strip-chart column: Time shift
+       under the left (Time-Domain) column, Freq shift under the right (Freq). */
+    .vs-shiftbar{flex-direction:row; align-items:flex-start; gap:0;
       margin-top:8px; margin-bottom:10px;}   /* remove the -18px tuck under wide plot cols */
-    .vs-shift-col, .vs-iqmode-col{width:100%; justify-content:center;}
-    .vs-iqmode-col{flex-wrap:wrap;}
+    .vs-shift-col{width:50%; justify-content:center;}
+    .vs-iqmode-col{width:100%; justify-content:center; flex-wrap:wrap;}
     /* strip charts get their own canvas on mobile; the IQ Mode selector (moved
        here by JS) sits in the gap between the IQ plot and the charts */
     #vs-canvas2-wrap{display:block;}
