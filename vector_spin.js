@@ -1281,17 +1281,19 @@ const SAMPLES = [
 function loadSample(s){
   const msg = el('vs-samples-msg');
   msg.className = 'vs-upload-msg'; msg.textContent = 'Loading…';
-  fetch(s.file)
+  fetch(s.file, {cache:'no-store'})                     // bypass HTTP cache so edited samples always reload
     .then(r=>{ if(!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
     .then(text=>{
       const arr = parseCsvIQ(text);
       inputEl.value = arr.map(fmtComplex).join(', ');   // auto-load into the input
       applyInput();
       const save = el('vs-samples-save');
-      if(save && save.checked){                         // optionally save the CSV to disk
+      if(save && save.checked){                         // optionally save the exact bytes we just loaded
+        const url = URL.createObjectURL(new Blob([text], {type:'text/csv'}));
         const a = document.createElement('a');
-        a.href = s.file; a.download = s.file.split('/').pop();
+        a.href = url; a.download = s.file.split('/').pop();
         document.body.appendChild(a); a.click(); a.remove();
+        URL.revokeObjectURL(url);
       }
       closeSamplesPanel();
     })
