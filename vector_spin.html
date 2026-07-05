@@ -1437,9 +1437,16 @@ inputEl.addEventListener('keydown', e=>{ if(e.key==='Enter'){ applyInput(); }});
 
 // CSV upload: the button reveals the format help + file picker; picking a file
 // validates the format and loads it (or shows an "Incorrect format" message).
+function closeUploadPanel(){
+  const p = el('vs-upload-panel'), m = el('vs-upload-msg');
+  p.style.display = 'none';
+  m.className = 'vs-upload-msg'; m.textContent = '';
+}
 el('vs-upload-btn').addEventListener('click', ()=>{
   const p = el('vs-upload-panel');
-  p.style.display = (p.style.display === 'none' || !p.style.display) ? 'block' : 'none';
+  const open = (p.style.display === 'none' || !p.style.display);
+  if(open){ const m = el('vs-upload-msg'); m.className = 'vs-upload-msg'; m.textContent = ''; }
+  p.style.display = open ? 'block' : 'none';
 });
 el('vs-upload-file').addEventListener('change', e=>{
   const file = e.target.files && e.target.files[0];
@@ -1451,13 +1458,14 @@ el('vs-upload-file').addEventListener('change', e=>{
       const arr = parseCsvIQ(String(reader.result));
       inputEl.value = arr.map(fmtComplex).join(', ');   // reuse the normal text-input path
       applyInput();
-      msg.className = 'vs-upload-msg ok';
-      msg.textContent = `Loaded ${arr.length} IQ sample${arr.length===1?'':'s'} into the ${vs.input_mode==='time'?'Time':'Freq'} domain.`;
+      e.target.value = '';        // allow re-selecting the same file next time
+      closeUploadPanel();         // success -> collapse back to just the Upload button
+      return;
     }catch(err){
       msg.className = 'vs-upload-msg err';
-      msg.textContent = 'Incorrect format: ' + err.message;
+      msg.textContent = 'Incorrect format: ' + err.message;   // keep panel open on error
     }
-    e.target.value = '';   // allow re-selecting the same file
+    e.target.value = '';
   };
   reader.onerror = ()=>{ msg.className = 'vs-upload-msg err'; msg.textContent = 'Incorrect format: could not read the file.'; };
   reader.readAsText(file);
