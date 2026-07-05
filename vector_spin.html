@@ -85,7 +85,7 @@ examples: 1, 2+3j, 3&nbsp;&nbsp;or&nbsp;&nbsp;[1,1,1,1,1]</div>
     <!-- CSV upload for IQ data, immediately below Input Array (desktop + mobile).
          Moves with the input block on mobile (see placeInputBlock). -->
     <div class="vs-upload-block" id="vs-upload-block">
-      <button class="vs-btn" id="vs-upload-btn">Upload CSV…</button>
+      <button class="vs-btn" id="vs-upload-btn">Upload CSV</button>
       <button class="vs-btn" id="vs-samples-btn">Examples</button>
       <div class="vs-upload-panel" id="vs-upload-panel" style="display:none;">
         <div class="vs-upload-help">
@@ -110,16 +110,13 @@ examples: 1, 2+3j, 3&nbsp;&nbsp;or&nbsp;&nbsp;[1,1,1,1,1]</div>
          dissolve (display:contents) and all three buttons flow onto one line. -->
     <div class="vs-actions">
     <div class="vs-row">
+      <button class="vs-btn" id="vs-savegif">Download GIF</button>
+      <label class="vs-hires" title="Use every frame at full resolution (larger file, smoother motion)"><input type="checkbox" id="vs-hires"> High res</label>
+      <span class="vs-note" id="vs-gif-status" style="margin-top:0;"></span>
       <div class="vs-field" style="margin-left:auto;">
         <button class="vs-btn" id="vs-startstop">Start / Stop</button>
         <button class="vs-btn" id="vs-clear">Clear</button>
       </div>
-    </div>
-
-    <div class="vs-row">
-      <button class="vs-btn" id="vs-savegif">Download GIF</button>
-      <label class="vs-hires" title="Use every frame at full resolution (larger file, smoother motion)"><input type="checkbox" id="vs-hires"> High res</label>
-      <span class="vs-note" id="vs-gif-status" style="margin-top:0;"></span>
     </div>
     </div>
 
