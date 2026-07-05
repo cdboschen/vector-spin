@@ -1178,8 +1178,8 @@ function parseCsvIQ(text){
 function setInputMode(mode){
   vs.input_mode = mode;
   inputDesc.textContent = mode==='time'
-    ? 'Input array as time samples — brackets optional;\nexamples: 1, 2+3j, 3   or   [1,1,1,1,1]'
-    : 'Input array as frequency samples — brackets optional;\nexamples: 0.3, 0, 0, 0.5+0.5j';
+    ? 'Input array as time samples. Brackets optional;\nexamples: 1, 2+3j, 3   or   [1,1,1,1,1]'
+    : 'Input array as frequency samples. Brackets optional;\nexamples: 0.3, 0, 0, 0.5+0.5j';
   applyInput();
 }
 

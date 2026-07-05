@@ -57,7 +57,18 @@
   </div>
 
   <div class="vs-controls">
-    <div class="vs-desc" id="vs-input-desc">Input array as time samples — brackets optional;
+    <div class="vs-row" id="vs-slider-row">
+      <div class="vs-slider">
+        <label>Update Time (ms): <span id="vs-time-val">100</span></label>
+        <input id="vs-time" type="range" min="10" max="500" step="1" value="100">
+      </div>
+      <div class="vs-slider">
+        <label>Frames: <span id="vs-frames-val">300</span></label>
+        <input id="vs-frames" type="range" min="50" max="1000" step="10" value="300">
+      </div>
+    </div>
+
+    <div class="vs-desc" id="vs-input-desc">Input array as time samples. Brackets optional;
 examples: 1, 2+3j, 3&nbsp;&nbsp;or&nbsp;&nbsp;[1,1,1,1,1]</div>
 
     <div class="vs-row">
@@ -87,7 +98,8 @@ examples: 1, 2+3j, 3&nbsp;&nbsp;or&nbsp;&nbsp;[1,1,1,1,1]</div>
         <div class="vs-upload-msg" id="vs-upload-msg"></div>
       </div>
       <div class="vs-upload-panel" id="vs-samples-panel" style="display:none;">
-        <div class="vs-upload-help">Explore example arrays below.</div>
+        <div class="vs-upload-help">Explore the samples below. Its array will be loaded into the
+          Input Array field. Optionally save to disk to view csv format.</div>
         <label class="vs-samples-save"><input type="checkbox" id="vs-samples-save"> Save CSV to disk</label>
         <div class="vs-samples-list" id="vs-samples-list"><!-- filled from JS SAMPLES --></div>
         <div class="vs-upload-msg" id="vs-samples-msg"></div>
@@ -98,17 +110,6 @@ examples: 1, 2+3j, 3&nbsp;&nbsp;or&nbsp;&nbsp;[1,1,1,1,1]</div>
          dissolve (display:contents) and all three buttons flow onto one line. -->
     <div class="vs-actions">
     <div class="vs-row">
-      <div class="vs-slider">
-        <label>Update Time (ms): <span id="vs-time-val">100</span></label>
-        <input id="vs-time" type="range" min="10" max="500" step="1" value="100">
-      </div>
-      <div class="vs-slider">
-        <label>Frames: <span id="vs-frames-val">300</span></label>
-        <input id="vs-frames" type="range" min="50" max="1000" step="10" value="300">
-      </div>
-
-      <div class="vs-sep"></div>
-
       <div class="vs-field" style="margin-left:auto;">
         <button class="vs-btn" id="vs-startstop">Start / Stop</button>
         <button class="vs-btn" id="vs-clear">Clear</button>
