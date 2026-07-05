@@ -1238,6 +1238,15 @@ el('vs-upload-btn').addEventListener('click', ()=>
 el('vs-samples-btn').addEventListener('click', ()=>
   togglePanel(el('vs-samples-panel'), closeUploadPanel, el('vs-samples-msg')));
 
+// Clicking anywhere outside the open Examples panel (and not on its toggle button)
+// collapses it — a user who decides not to explore the samples just clicks away.
+document.addEventListener('click', (e)=>{
+  const panel = el('vs-samples-panel'), btn = el('vs-samples-btn');
+  if(!panel || panel.style.display === 'none' || !panel.style.display) return;
+  if(panel.contains(e.target) || (btn && btn.contains(e.target))) return;
+  closeSamplesPanel();
+});
+
 el('vs-upload-file').addEventListener('change', e=>{
   const file = e.target.files && e.target.files[0];
   const msg = el('vs-upload-msg');
