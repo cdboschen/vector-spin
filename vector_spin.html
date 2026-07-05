@@ -1024,19 +1024,20 @@ function render(){
 function gifShort(a, v){ a.push(v & 0xff, (v>>8) & 0xff); }
 function gifStr(a, s){ for(let i=0;i<s.length;i++) a.push(s.charCodeAt(i)); }
 
-// Median-cut quantization to a 256-colour palette, plus a cached nearest-colour
-// mapper. Colours are bucketed in 15-bit (5-5-5) space to keep it fast.
-function quantizeFrames(frames, sampleStride){
-  const hist = new Map();
-  for(const fr of frames){
-    const d = fr.data;
-    for(let i=0;i<d.length;i+=4*sampleStride){
-      const key = ((d[i]>>3)<<10)|((d[i+1]>>3)<<5)|(d[i+2]>>3);
-      let e = hist.get(key);
-      if(!e){ e={c:0,r:0,g:0,b:0}; hist.set(key,e); }
-      e.c++; e.r+=d[i]; e.g+=d[i+1]; e.b+=d[i+2];
-    }
+// Add one frame's pixels (sampled every sampleStride) to a colour histogram.
+// Called incrementally so we never hold every frame's pixels in memory at once.
+function buildHistogram(hist, data, sampleStride){
+  for(let i=0;i<data.length;i+=4*sampleStride){
+    const key = ((data[i]>>3)<<10)|((data[i+1]>>3)<<5)|(data[i+2]>>3);
+    let e = hist.get(key);
+    if(!e){ e={c:0,r:0,g:0,b:0}; hist.set(key,e); }
+    e.c++; e.r+=data[i]; e.g+=data[i+1]; e.b+=data[i+2];
   }
+}
+
+// Median-cut a colour histogram to a 256-entry palette, plus a cached
+// nearest-colour mapper. Colours are bucketed in 15-bit (5-5-5) space for speed.
+function paletteFromHistogram(hist){
   const chanAvg = (e,ch)=> ch===0? e.r/e.c : ch===1? e.g/e.c : e.b/e.c;
   const ranges = box=>{
     let rmn=255,rmx=0,gmn=255,gmx=0,bmn=255,bmx=0;
@@ -1153,47 +1154,89 @@ async function saveGif(){
   const prevMode = layoutMode;
   computeLayout('wide'); applyCanvasSize();
   try{
-    const scale = Math.min(1, 720/CW);
-    const GW = Math.round(CW*scale), GH = Math.round(CH*scale);
-    const tmp = document.createElement('canvas'); tmp.width=GW; tmp.height=GH;
-    const tctx = tmp.getContext('2d');
+    // Render the vectors at 1.5x resolution for crisp lines/text: point the main
+    // canvas at the export size and scale the drawing transform to match, so the
+    // whole scene is re-rasterised at 1620x837 (true supersampling, not an upscale).
+    const SS = 1.5;
+    const GW = Math.round(CW*SS), GH = Math.round(CH*SS);
+    const SIZE_CEIL = 5*1024*1024, TARGET = Math.round(SIZE_CEIL*0.94);
+    canvas.width = GW; canvas.height = GH;
+    ctx1.setTransform(SS,0,0,SS,0,0);
+
     const totalSteps = vs.nsamps;
-    // capture every step when possible (stride 1) for smooth motion; only
-    // subsample very long runs to bound file size. Per-frame delay is scaled by
-    // stride so playback speed still matches the live animation.
-    const stride = Math.max(1, Math.ceil(totalSteps/300));
-    // warm up one full revolution so the fading trace loops seamlessly
-    armAnimation();
-    for(let i=0;i<totalSteps;i++) step();
-    const frames = [];
+    // Render is deterministic, so we run the animation more than once rather than
+    // holding every full-res frame in memory. warmup() replays one revolution so
+    // the fading trace loops seamlessly; frameData() renders + reads one frame.
+    const warmup = ()=>{ armAnimation(); for(let i=0;i<totalSteps;i++) step(); };
+    const frameData = ()=>{ render(); return ctx1.getImageData(0,0,GW,GH); };
+    const indexFrame = (data)=>{
+      const idx = new Uint8Array(GW*GH);
+      for(let p=0,q=0; q<idx.length; p+=4,q++) idx[q] = nearest(data[p],data[p+1],data[p+2]);
+      return idx;
+    };
+
+    // ---- pass 1: build the palette from ~80 sampled frames; keep a few to
+    //      measure the average encoded frame size for the file-size budget ----
+    status.textContent = 'Analyzing…'; await yield_();
+    const pStride = Math.max(1, Math.ceil(totalSteps/80));
+    const hist = new Map();
+    const samples = [];
+    warmup();
+    let sc = 0;
+    for(let f=0; f<totalSteps; f++){
+      step();
+      if(f % pStride === 0){
+        const img = frameData();
+        buildHistogram(hist, img.data, 2);
+        if(samples.length < 5 && sc % 16 === 0) samples.push(img);
+        if(++sc % 10 === 0){ status.textContent = `Analyzing… ${sc}`; await yield_(); }
+      }
+    }
+    var {palette, nearest} = paletteFromHistogram(hist);
+
+    // average compressed bytes per frame (LZW body + ~20 bytes GIF structure)
+    let measBytes = 0;
+    for(const img of samples) measBytes += lzwEncode(indexFrame(img.data), 8).length + 20;
+    const avgFrame = samples.length ? measBytes/samples.length : 70000;
+    // pick the frame count: as many as the slider asks, capped to fit the 5 MB
+    // ceiling (and a memory backstop). Fewer frames -> larger per-frame delay.
+    const budgetFrames = Math.max(2, Math.floor((TARGET - 800) / avgFrame));
+    const finalFrames = Math.min(totalSteps, budgetFrames, 300);
+    const stride = Math.max(1, Math.round(totalSteps/finalFrames));
+
+    // ---- pass 2: render + index the chosen frames ----
     status.textContent = 'Rendering frames…'; await yield_();
+    const indexed = [];
+    warmup();
     for(let f=0; f<totalSteps; f++){
       step();
       if(f % stride === 0){
-        render();
-        tctx.clearRect(0,0,GW,GH);
-        tctx.drawImage(canvas, 0,0, canvas.width, canvas.height, 0,0, GW, GH);
-        frames.push(tctx.getImageData(0,0,GW,GH));
-        if(frames.length % 10 === 0){ status.textContent = `Rendering… ${frames.length} frames`; await yield_(); }
+        indexed.push(indexFrame(frameData().data));
+        if(indexed.length % 10 === 0){ status.textContent = `Encoding… ${indexed.length}`; await yield_(); }
       }
     }
-    status.textContent = 'Quantizing colours…'; await yield_();
-    const {palette, nearest} = quantizeFrames(frames, 3);
-    const indexed = [];
-    for(let fi=0; fi<frames.length; fi++){
-      const d = frames[fi].data, idx = new Uint8Array(GW*GH);
-      for(let p=0,q=0; q<idx.length; p+=4,q++) idx[q] = nearest(d[p],d[p+1],d[p+2]);
-      indexed.push(idx);
-      if(fi % 10 === 0){ status.textContent = `Encoding… ${fi+1}/${frames.length}`; await yield_(); }
+    let delayCs = Math.max(2, Math.round(vs.refresh*stride/10));
+
+    // ---- assemble; if the estimate overshoots, trim frames to fit the ceiling ----
+    status.textContent = 'Building GIF…'; await yield_();
+    let frames = indexed;
+    let bytes = assembleGif(GW, GH, palette, frames, delayCs);
+    while(bytes.length > SIZE_CEIL && frames.length > 2){
+      const keep = Math.max(2, Math.floor(frames.length * TARGET / bytes.length));
+      const stepF = frames.length / keep, kept = [];
+      for(let i=0;i<keep;i++) kept.push(frames[Math.min(frames.length-1, Math.floor(i*stepF))]);
+      delayCs = Math.round(delayCs * frames.length / kept.length);
+      frames = kept;
+      await yield_();
+      bytes = assembleGif(GW, GH, palette, frames, delayCs);
     }
-    const delayCs = Math.max(2, Math.round(vs.refresh*stride/10));
-    const bytes = assembleGif(GW, GH, palette, indexed, delayCs);
+
     const blob = new Blob([new Uint8Array(bytes)], {type:'image/gif'});
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a'); a.href=url; a.download='vectorspin.gif';
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(()=>URL.revokeObjectURL(url), 2000);
-    status.textContent = `Saved GIF — ${indexed.length} frames, ${Math.round(bytes.length/1024)} KB`;
+    status.textContent = `Saved GIF — ${frames.length} frames, ${GW}×${GH}, ${Math.round(bytes.length/1024)} KB`;
   } catch(err){
     status.textContent = 'GIF export failed: ' + err.message;
   } finally {
