@@ -46,6 +46,17 @@
   }
   button.vs-btn:hover{background:#eee;}
   button.vs-btn:disabled{opacity:.4; cursor:default;}
+  /* CSV upload for IQ data */
+  .vs-upload-block{margin:6px 0 4px;}
+  .vs-upload-panel{border:1px solid var(--border); border-radius:6px; padding:10px 12px;
+    margin-top:8px; background:var(--panel); max-width:540px;}
+  .vs-upload-help{font-size:12.5px; color:#555; line-height:1.55; margin-bottom:8px;}
+  .vs-upload-help code{background:#eaeaea; padding:1px 5px; border-radius:3px;
+    font-family:ui-monospace,Consolas,monospace; font-size:12px;}
+  #vs-upload-file{font-size:13px; max-width:100%;}
+  .vs-upload-msg{font-size:12.5px; margin-top:8px; min-height:1em;}
+  .vs-upload-msg.err{color:var(--red); font-weight:600;}
+  .vs-upload-msg.ok{color:#2a7d2a;}
   .vs-shift{display:inline-flex; gap:4px; align-items:center;}
   .vs-shift button{font-family:ui-monospace,monospace; width:30px; padding:6px 0;}
   /* control bar aligned under the plots: time-shift (left col), IQ mode
@@ -157,6 +168,22 @@ examples: 1, 2+3j, 3&nbsp;&nbsp;or&nbsp;&nbsp;[1,1,1,1,1]</div>
           <label><input type="radio" name="inputmode" value="freq">Freq</label>
         </span>
         <input id="vs-input" type="text" spellcheck="false" value="[1, 2+3j, 3]">
+      </div>
+    </div>
+
+    <!-- CSV upload for IQ data, immediately below Input Array (desktop + mobile).
+         Moves with the input block on mobile (see placeInputBlock). -->
+    <div class="vs-upload-block" id="vs-upload-block">
+      <button class="vs-btn" id="vs-upload-btn">Upload CSV…</button>
+      <div class="vs-upload-panel" id="vs-upload-panel" style="display:none;">
+        <div class="vs-upload-help">
+          Upload IQ data as a <b>two-column CSV</b>: <code>real, imag</code> — one complex
+          sample per line (comma-separated). A header row like <code>real,imag</code> is
+          optional. It loads into the currently selected <b>Input Array</b> domain (Time/Freq).<br>
+          Example:&nbsp; <code>1, 0</code> &nbsp; <code>2, 3</code> &nbsp; <code>3, -1</code>
+        </div>
+        <input type="file" id="vs-upload-file" accept=".csv,text/csv,text/plain">
+        <div class="vs-upload-msg" id="vs-upload-msg"></div>
       </div>
     </div>
 
@@ -667,17 +694,24 @@ function placeInputBlock(mode){
   const desc = document.getElementById('vs-input-desc');
   const inp  = document.getElementById('vs-input');
   const row  = inp && inp.closest('.vs-row');
+  const up   = document.getElementById('vs-upload-block');
   const root = document.querySelector('.vs-root');
   if(!desc || !row || !root) return;
-  if(!_inpHome){ _inpHome = desc.parentElement; _inpAnchor = row.nextElementSibling; }
+  const items = [desc, row, up].filter(Boolean);   // move help text, input row, upload block together
+  if(!_inpHome){ _inpHome = desc.parentElement; _inpAnchor = items[items.length-1].nextElementSibling; }
   if(mode === 'stacked'){
-    const title = document.getElementById('vs-title');   // keep the title on top
-    const anchor = (title && title.parentElement===root) ? title.nextSibling : root.firstChild;
-    root.insertBefore(desc, anchor);             // help text just under the title
-    root.insertBefore(row, desc.nextSibling);    // then the input row, still above the IQ plot
+    // Insert desc, row, up in order just after the title. Use a moving cursor
+    // (not a fixed anchor) so repeated calls are idempotent — a fixed anchor that
+    // is itself one of the moved items would reshuffle them on re-invocation.
+    const title = document.getElementById('vs-title');
+    let after = (title && title.parentElement===root) ? title : null;
+    for(const it of items){
+      const ref = after ? after.nextSibling : root.firstChild;
+      if(it !== ref) root.insertBefore(it, ref);
+      after = it;
+    }
   } else if(desc.parentElement !== _inpHome){
-    _inpHome.insertBefore(desc, _inpAnchor);    // restore: desc, then row, before their old anchor
-    _inpHome.insertBefore(row, _inpAnchor);
+    for(const it of items) _inpHome.insertBefore(it, _inpAnchor);   // restore to their old spot
   }
 }
 
@@ -1335,6 +1369,36 @@ function applyInput(){
   startAnim();
 }
 
+// Format a complex value back into parseInput-compatible text (e.g. 2+3j, 0.5, -1j-free).
+function fmtComplex(c){
+  const n = x => String(x);
+  if(c.im === 0) return n(c.re);
+  return n(c.re) + (c.im < 0 ? '-' : '+') + n(Math.abs(c.im)) + 'j';
+}
+
+// Parse a two-column (real, imag) CSV into an array of complex samples. Throws with
+// a human-readable reason on any format problem (surfaced as "Incorrect format: …").
+function parseCsvIQ(text){
+  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
+  if(!lines.length) throw new Error('the file is empty.');
+  // optional header row: skip line 1 if it contains any non-numeric token
+  let start = 0;
+  const first = lines[0].split(',').map(s => s.trim());
+  if(first.some(s => s !== '' && isNaN(Number(s)))) start = 1;
+  const arr = [];
+  for(let i = start; i < lines.length; i++){
+    const cols = lines[i].split(',').map(s => s.trim());
+    if(cols.length !== 2)
+      throw new Error(`line ${i+1} has ${cols.length} column${cols.length===1?'':'s'}, expected 2 (real, imag).`);
+    const re = Number(cols[0]), im = Number(cols[1]);
+    if(cols[0] === '' || cols[1] === '' || isNaN(re) || isNaN(im))
+      throw new Error(`line ${i+1} has a non-numeric value.`);
+    arr.push(C(re, im));
+  }
+  if(!arr.length) throw new Error('no data rows found.');
+  return arr;
+}
+
 function setInputMode(mode){
   vs.input_mode = mode;
   inputDesc.textContent = mode==='time'
@@ -1368,6 +1432,34 @@ function setFshift(v){
 // events
 inputEl.addEventListener('change', applyInput);
 inputEl.addEventListener('keydown', e=>{ if(e.key==='Enter'){ applyInput(); }});
+
+// CSV upload: the button reveals the format help + file picker; picking a file
+// validates the format and loads it (or shows an "Incorrect format" message).
+el('vs-upload-btn').addEventListener('click', ()=>{
+  const p = el('vs-upload-panel');
+  p.style.display = (p.style.display === 'none' || !p.style.display) ? 'block' : 'none';
+});
+el('vs-upload-file').addEventListener('change', e=>{
+  const file = e.target.files && e.target.files[0];
+  const msg = el('vs-upload-msg');
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    try{
+      const arr = parseCsvIQ(String(reader.result));
+      inputEl.value = arr.map(fmtComplex).join(', ');   // reuse the normal text-input path
+      applyInput();
+      msg.className = 'vs-upload-msg ok';
+      msg.textContent = `Loaded ${arr.length} IQ sample${arr.length===1?'':'s'} into the ${vs.input_mode==='time'?'Time':'Freq'} domain.`;
+    }catch(err){
+      msg.className = 'vs-upload-msg err';
+      msg.textContent = 'Incorrect format: ' + err.message;
+    }
+    e.target.value = '';   // allow re-selecting the same file
+  };
+  reader.onerror = ()=>{ msg.className = 'vs-upload-msg err'; msg.textContent = 'Incorrect format: could not read the file.'; };
+  reader.readAsText(file);
+});
 
 for(const r of document.querySelectorAll('input[name="inputmode"]'))
   r.addEventListener('change', e=> setInputMode(e.target.value));
