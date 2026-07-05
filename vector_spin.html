@@ -464,6 +464,12 @@ const anim = {
   lastTs:0, acc:0
 };
 
+// Spotlight-highlight state: array index k of the impulse (and its paired phasor)
+// currently pointed at, or null when nothing is selected. When set, non-selected
+// phasors/impulses render pale grey (DIM) while index k stays full colour.
+let highlightIndex = null;
+const DIM = '#cfcfcf';
+
 function clearHistory(){
   anim.histX.length=0; anim.histY.length=0; anim.histTx.length=0;
   anim.histMag.length=0; anim.histPh.length=0;
@@ -784,17 +790,25 @@ function drawMarkers(mp, xs, ys, color, size){
     ctx.beginPath(); ctx.arc(px, py, size/2, 0, TAU); ctx.fill();
   }
 }
-function drawStems(mp, xs, ys, color, mColor, mSize){
-  ctx.strokeStyle = color; ctx.lineWidth = 2.8;   // 2x wider stems
+function drawStems(mp, xs, ys, color, mColor, mSize, hi){
   const y0 = mp.Y(0);
+  // stems: when spotlighting (hi != null) dim all but index hi, which thickens
   for(let i=0;i<xs.length;i++){
+    ctx.strokeStyle = (hi==null || i===hi) ? color : DIM;
+    ctx.lineWidth = (i===hi) ? 3.8 : 2.8;          // 2x wider stems (selected wider still)
     const px=mp.X(xs[i]);
     ctx.beginPath(); ctx.moveTo(px, y0); ctx.lineTo(px, mp.Y(ys[i])); ctx.stroke();
   }
   // baseline
   ctx.strokeStyle = '#000'; ctx.lineWidth = 0.8;
   ctx.beginPath(); ctx.moveTo(mp.ix, y0); ctx.lineTo(mp.ix+mp.iw, y0); ctx.stroke();
-  drawMarkers(mp, xs, ys, mColor, mSize);          // stem tip dots (same size as plain markers)
+  // stem tip dots (same size as plain markers); selected drawn last, enlarged
+  if(hi==null){
+    drawMarkers(mp, xs, ys, mColor, mSize);
+  } else {
+    for(let i=0;i<xs.length;i++){ if(i!==hi) drawMarkers(mp, [xs[i]], [ys[i]], DIM, mSize); }
+    if(hi>=0 && hi<xs.length) drawMarkers(mp, [xs[hi]], [ys[hi]], mColor, mSize*1.5);
+  }
 }
 function drawLine(mp, xs, ys, color, w){
   ctx.strokeStyle = color; ctx.lineWidth = w;
@@ -829,8 +843,10 @@ function drawStripPlot(name, side, isMag){
   const yvals = isMag ? d.mag : d.ph;
   // ideal smooth curve (red) under markers
   if(d.ideal){ drawLine(mp, d.ideal.x, isMag?d.ideal.mag:d.ideal.ph, '#d62728', 0.8); }
-  // stems (conjugate domain)
-  if(d.stems){ drawStems(mp, d.index, yvals, vs.phasor_color, d.marker[0], d.marker[1]); }
+  // stems (conjugate/source domain — the interactive one). Spotlight index passed
+  // only here; the stem domain always matches the phasor source, so highlightIndex
+  // (a source-domain array index) selects the right impulse.
+  if(d.stems){ drawStems(mp, d.index, yvals, vs.phasor_color, d.marker[0], d.marker[1], highlightIndex); }
   else { drawMarkers(mp, d.index, yvals, d.marker[0], d.marker[1]); }
   unclip();
 }
@@ -1007,13 +1023,28 @@ function render(){
   // IQ phasor chain (green) + tip trace (blue)
   const iq = mappers.iq;
   clip(iq);
-  drawLine(iq, anim.chainX, anim.chainY, vs.phasor_color, 2.8);   // phasor shafts match stem width
   // Colour the phasor-tip dots by the domain they came from: the impulses driving
   // the phasors live in the conjugate domain (freq when the IQ plot shows Time, and
   // vice-versa), so tips are red in Time mode / blue in Freq mode. Origin stays green.
   const tipColor = (vs.iq_mode==='time') ? vs.fmarker[0] : vs.tmarker[0];
-  drawDots(iq, anim.chainX.slice(1), anim.chainY.slice(1), tipColor, 3.15);  // tips: source-domain colour
-  if(anim.chainX.length) drawDots(iq, [anim.chainX[0]], [anim.chainY[0]], vs.phasor_color, 3.15);  // origin stays green
+  const cX = anim.chainX, cY = anim.chainY;
+  if(highlightIndex==null){
+    drawLine(iq, cX, cY, vs.phasor_color, 2.8);                    // phasor shafts match stem width
+    drawDots(iq, cX.slice(1), cY.slice(1), tipColor, 3.15);        // tips: source-domain colour
+  } else {
+    // Spotlight: dim every phasor segment/tip except the selected index k, drawn last (on top).
+    const k = highlightIndex;
+    for(let s=0;s<cX.length-1;s++){
+      if(s===k) continue;
+      drawLine(iq, [cX[s],cX[s+1]], [cY[s],cY[s+1]], DIM, 2.8);
+      drawDots(iq, [cX[s+1]], [cY[s+1]], DIM, 3.15);
+    }
+    if(k>=0 && k<cX.length-1){
+      drawLine(iq, [cX[k],cX[k+1]], [cY[k],cY[k+1]], vs.phasor_color, 3.8);
+      drawDots(iq, [cX[k+1]], [cY[k+1]], tipColor, 4.2);
+    }
+  }
+  if(anim.chainX.length) drawDots(iq, [cX[0]], [cY[0]], vs.phasor_color, 3.15);  // origin stays green
   drawDots(iq, anim.histX, anim.histY, vs.history_color, 1.4);
   unclip();
 
@@ -1278,6 +1309,7 @@ const inputEl   = el('vs-input');
 const inputDesc = el('vs-input-desc');
 
 function refreshPlots(){
+  highlightIndex = null;   // data/domain/shift changed -> any selection is stale
   computePlotData();
   armAnimation();
   render();
@@ -1357,7 +1389,7 @@ el('vs-clear').addEventListener('click', ()=>{
   vs.tvalues=[]; vs.fvalues=[]; vs.tshift=0; vs.fshift=0;
   inputEl.value=''; inputEl.classList.remove('vs-error');
   updateShiftLabels();
-  PD=null; anim.chainX=[0]; anim.chainY=[0]; clearHistory();
+  PD=null; anim.chainX=[0]; anim.chainY=[0]; clearHistory(); highlightIndex=null;
   render();
 });
 
@@ -1385,6 +1417,60 @@ if(window.ResizeObserver){
   new ResizeObserver(scheduleRelayout).observe(canvas.parentElement);
 }
 window.matchMedia('(max-width:700px)').addEventListener('change', scheduleRelayout);
+
+// ---- Impulse spotlight: hover (desktop) / tap (phone) a source-domain impulse ----
+// Which canvas holds the interactive (source-domain) strip charts in this layout.
+function interactiveCanvas(){
+  return (layoutMode==='stacked') ? {cnv:canvas2, w:CW2, h:CH2} : {cnv:canvas, w:CW, h:CH};
+}
+// Map a pointer event to the source-domain impulse index under it, or null.
+function hitTestImpulse(e, cnv, w, h){
+  if(!PD) return null;
+  const r = cnv.getBoundingClientRect();
+  if(!r.width || !r.height) return null;
+  const lx = (e.clientX - r.left) * w / r.width;   // -> logical coords (dpr absorbed by setTransform)
+  const ly = (e.clientY - r.top)  * h / r.height;
+  const srcSide = (vs.iq_mode==='time') ? 'freq' : 'time';   // stem/source domain
+  const d = PD[srcSide]; const N = d.index.length;
+  const shift = (srcSide==='freq') ? vs.fshift : vs.tshift;
+  for(const suffix of ['_mag','_phase']){
+    const mp = mappers[srcSide+suffix];
+    if(!mp) continue;
+    if(lx < mp.ix-4 || lx > mp.ix+mp.iw+4 || ly < mp.iy || ly > mp.iy+mp.ih) continue;
+    const sx = mp.iw/(mp.xlim[1]-mp.xlim[0]);
+    const dataX = mp.xlim[0] + (lx-mp.ix)/sx;
+    const k = Math.round(dataX - shift);
+    if(k>=0 && k<N && Math.abs((k+shift)-dataX) <= 0.5) return k;   // ±0.5 band per impulse
+  }
+  return null;
+}
+function setHighlight(k){
+  if(k===highlightIndex) return;
+  highlightIndex = k;
+  if(!anim.running) render();      // running loop repaints itself
+}
+function onPointerMove(e){
+  if(e.pointerType==='touch') return;            // touch has no hover; handled by click
+  const ic = interactiveCanvas();
+  if(e.currentTarget !== ic.cnv) return;
+  const k = hitTestImpulse(e, ic.cnv, ic.w, ic.h);
+  ic.cnv.style.cursor = (k!=null) ? 'pointer' : 'default';
+  setHighlight(k);                                // clears (null) the moment it leaves an impulse
+}
+function onPointerLeave(e){
+  if(e.pointerType==='touch') return;
+  setHighlight(null);
+}
+function onCanvasClick(e){                         // tap path (phone) + desktop click
+  const ic = interactiveCanvas();
+  if(e.currentTarget !== ic.cnv) return;
+  setHighlight(hitTestImpulse(e, ic.cnv, ic.w, ic.h));   // miss -> null (tap elsewhere clears)
+}
+for(const c of [canvas, canvas2]){
+  c.addEventListener('pointermove', onPointerMove);
+  c.addEventListener('pointerleave', onPointerLeave);
+  c.addEventListener('click', onCanvasClick);
+}
 
 // initial state
 updateShiftLabels();
