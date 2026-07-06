@@ -1353,10 +1353,73 @@ function fmtComplex(c){
   return n(c.re) + (c.im < 0 ? '-' : '+') + n(Math.abs(c.im)) + 'j';
 }
 
-// Parse a two-column (real, imag) CSV into an array of complex samples. Throws with
-// a human-readable reason on any format problem (surfaced as "Incorrect format: …").
+// Optional "# key: value" settings lines a CSV may carry above its data. Keys are
+// case-insensitive; a few aliases are accepted; unknown "#" lines are ignored so
+// plain comments (and future keys) stay legal. Canonical names, documented in the
+// upload help: input, iq_mode, time_shift, freq_shift, update_time, frames.
+const CSV_SETTING_KEYS = {
+  input:'input_mode', input_mode:'input_mode', input_array:'input_mode',
+  iq_mode:'iq_mode', iqmode:'iq_mode',
+  time_shift:'tshift', tshift:'tshift',
+  freq_shift:'fshift', fshift:'fshift',
+  update_time:'refresh', refresh:'refresh',
+  frames:'frames', nsamps:'frames',
+};
+function parseCsvSetting(line, out){
+  const m = /^#\s*([A-Za-z_][A-Za-z_ ]*?)\s*[:=]\s*(\S+)\s*$/.exec(line);
+  if(!m) return;                                            // plain comment
+  const key = CSV_SETTING_KEYS[m[1].toLowerCase().replace(/ +/g, '_')];
+  if(!key) return;                                          // unknown key -> ignore
+  const val = m[2].toLowerCase();
+  if(key === 'input_mode' || key === 'iq_mode'){
+    if(val !== 'time' && val !== 'freq')
+      throw new Error(`${m[1]} must be "time" or "freq".`);
+    out[key] = val;
+  } else {
+    const n = Number(val);
+    if(!Number.isFinite(n)) throw new Error(`${m[1]} must be a number.`);
+    out[key] = n;
+  }
+}
+
+// Apply the settings extracted from a CSV. Keys the file omits leave the current
+// control untouched. Sets the model and syncs the matching UI control quietly —
+// the caller's applyInput() afterwards recomputes and redraws everything once.
+function applyCsvSettings(s){
+  if(s.input_mode){
+    setInputModeQuiet(s.input_mode);
+    for(const r of document.querySelectorAll('input[name="inputmode"]'))
+      r.checked = (r.value === s.input_mode);
+  }
+  if(s.iq_mode){
+    vs.iq_mode = s.iq_mode;
+    for(const r of document.querySelectorAll('input[name="iqmode"]'))
+      r.checked = (r.value === s.iq_mode);
+  }
+  if(s.tshift !== undefined){ vs.tshift = Math.round(s.tshift); }
+  if(s.fshift !== undefined){ vs.fshift = Math.round(s.fshift); }
+  updateShiftLabels();
+  if(s.refresh !== undefined){
+    vs.refresh = Math.min(500, Math.max(10, Math.round(s.refresh)));
+    el('vs-time').value = vs.refresh; el('vs-time-val').textContent = vs.refresh;
+  }
+  if(s.frames !== undefined){
+    vs.nsamps = Math.min(1000, Math.max(50, Math.round(s.frames)));
+    el('vs-frames').value = vs.nsamps; el('vs-frames-val').textContent = vs.nsamps;
+  }
+}
+
+// Parse a two-column (real, imag) CSV into an array of complex samples plus any
+// "# key: value" settings. Throws with a human-readable reason on any format
+// problem (surfaced as "Incorrect format: …").
 function parseCsvIQ(text){
-  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
+  const raw = text.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
+  const settings = {};
+  const lines = [];
+  for(const l of raw){
+    if(l.startsWith('#')) parseCsvSetting(l, settings);
+    else lines.push(l);
+  }
   if(!lines.length) throw new Error('the file is empty.');
   // optional header row: skip line 1 if it contains any non-numeric token
   let start = 0;
@@ -1373,14 +1436,19 @@ function parseCsvIQ(text){
     arr.push(C(re, im));
   }
   if(!arr.length) throw new Error('no data rows found.');
-  return arr;
+  return { arr, settings };
 }
 
-function setInputMode(mode){
+// Set the input-array domain without reparsing (used by CSV settings, which
+// apply before the array text is loaded); setInputMode adds the reparse.
+function setInputModeQuiet(mode){
   vs.input_mode = mode;
   inputDesc.textContent = mode==='time'
     ? 'Input array as time samples. Brackets optional;\nexamples: 1, 2+3j, 3   or   [1,1,1,1,1]'
     : 'Input array as frequency samples. Brackets optional;\nexamples: 0.3, 0, 0, 0.5+0.5j';
+}
+function setInputMode(mode){
+  setInputModeQuiet(mode);
   applyInput();
 }
 
@@ -1450,7 +1518,8 @@ el('vs-upload-file').addEventListener('change', e=>{
   const reader = new FileReader();
   reader.onload = ()=>{
     try{
-      const arr = parseCsvIQ(String(reader.result));
+      const { arr, settings } = parseCsvIQ(String(reader.result));
+      applyCsvSettings(settings);                       // set modes/shifts/sliders first
       inputEl.value = arr.map(fmtComplex).join(', ');   // reuse the normal text-input path
       applyInput();
       e.target.value = '';        // allow re-selecting the same file next time
@@ -1495,7 +1564,8 @@ function loadSample(s){
   fetch(s.file, {cache:'no-store'})                     // bypass HTTP cache so edited samples always reload
     .then(r=>{ if(!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
     .then(text=>{
-      const arr = parseCsvIQ(text);
+      const { arr, settings } = parseCsvIQ(text);
+      applyCsvSettings(settings);                       // set modes/shifts/sliders first
       inputEl.value = arr.map(fmtComplex).join(', ');   // auto-load into the input
       applyInput();
       const save = el('vs-samples-save');
