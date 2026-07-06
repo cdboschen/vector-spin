@@ -16,7 +16,11 @@ There are two independent implementations of the same idea:
   `<script src>`s the JS; all three are plain static files served together). This is the version
   embedded on the website (dsp-coach.com) via an `<iframe>`. It can export the animation as an
   animated GIF entirely client-side, upload IQ data as a two-column CSV, and load sample CSVs
-  from `samples/`.
+  from `samples/`. CSVs (uploads and samples alike) may carry optional `# key: value` comment
+  lines above the data that preset the controls — keys `input` (time|freq), `iq_mode`
+  (time|freq), `time_shift`, `freq_shift`, `update_time` (ms), `frames`; omitted keys leave the
+  current setting untouched, unknown `#` lines are ignored (see `parseCsvSetting` /
+  `applyCsvSettings` in the JS). Web-only; the desktop app has no CSV loader.
 - **`vector_spin.py`** — the original Matplotlib desktop app (opens a Qt window). Same model,
   rendered with Matplotlib widgets.
 

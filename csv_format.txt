@@ -1,0 +1,82 @@
+VectorSpin CSV file format
+==========================
+
+Applies to CSVs loaded into the web app (vector_spin.html) via "Upload CSV" or
+the sample loader (samples/*.csv). The desktop app (vector_spin.py) has no CSV
+loader.
+
+A file has three parts, in order. Only the data rows are required:
+
+  1. Optional "#" settings/comment lines
+  2. Optional header row (e.g. "real,imag")
+  3. Data rows: one complex sample per line, "real, imag"
+
+Example
+-------
+
+  # input: freq
+  # iq_mode: time
+  # time_shift: -82
+  # this line is a plain comment and is ignored
+  real,imag
+  1, 0
+  2, 3
+  3, -1
+
+1. Settings lines
+-----------------
+
+Any line starting with "#" is stripped from the data. A line of the form
+
+  # key: value        (or  # key = value)
+
+presets one of the app's controls before the data is loaded. Any other "#"
+line — a plain comment, or an unknown key — is silently ignored, so freeform
+notes and future keys stay legal.
+
+Keys are case-insensitive. A key the file omits leaves that control at its
+current value.
+
+  Key           Value                                        Aliases
+  ---           -----                                        -------
+  input         "time" or "freq" — which domain the          input_mode,
+                data rows represent                          input_array
+  iq_mode       "time" or "freq" — what the central IQ       iqmode
+                plot animates (controls spin direction)
+  time_shift    integer sample offset (rounded if not)       tshift
+  freq_shift    integer bin offset (rounded if not)          fshift
+  update_time   ms per animation frame, clamped to 10..500   refresh
+  frames        samples per revolution, clamped to 50..1000  nsamps
+
+The two mode keys must be exactly "time" or "freq"; the numeric keys must
+parse as numbers. Anything else rejects the file with an "Incorrect format"
+message.
+
+2. Header row
+-------------
+
+If the first non-comment line contains any non-numeric token (e.g.
+"real,imag"), it is skipped.
+
+3. Data rows
+------------
+
+One complex sample per line: exactly two comma-separated numbers,
+
+  <real>, <imag>
+
+Whitespace around values is fine; blank lines are ignored. A row with any
+other number of columns, or a non-numeric/empty value, rejects the file with
+the offending line number. At least one data row is required.
+
+Loading behavior
+----------------
+
+On load, settings are applied first (modes, shifts, and sliders, including
+their on-screen controls), then the samples are formatted into the Input
+Array text box and run through the normal input path — the file behaves
+exactly as if you had set the controls by hand and typed the array. The data
+loads into whichever Input Array domain (Time/Freq) is selected, so use the
+"input" setting to make a file self-describing.
+
+See parseCsvIQ / parseCsvSetting / applyCsvSettings in vector_spin.js.

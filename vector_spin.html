@@ -92,7 +92,12 @@ examples: 1, 2+3j, 3&nbsp;&nbsp;or&nbsp;&nbsp;[1,1,1,1,1]</div>
           Upload IQ data as a <b>two-column CSV</b>: <code>real, imag</code> — one complex
           sample per line (comma-separated). A header row like <code>real,imag</code> is
           optional. It loads into the currently selected <b>Input Array</b> domain (Time/Freq).<br>
-          Example:&nbsp; <code>1, 0</code> &nbsp; <code>2, 3</code> &nbsp; <code>3, -1</code>
+          Example:&nbsp; <code>1, 0</code> &nbsp; <code>2, 3</code> &nbsp; <code>3, -1</code><br>
+          Optional <code>#</code> comment lines above the data preset the controls
+          (any subset; omitted ones keep their current values):<br>
+          <code># input: time</code>&nbsp; <code># iq_mode: freq</code>&nbsp;
+          <code># time_shift: -82</code>&nbsp; <code># freq_shift: 0</code>&nbsp;
+          <code># update_time: 50</code>&nbsp; <code># frames: 300</code>
         </div>
         <input type="file" id="vs-upload-file" accept=".csv,text/csv,text/plain">
         <div class="vs-upload-msg" id="vs-upload-msg"></div>

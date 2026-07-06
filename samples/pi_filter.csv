@@ -1,3 +1,9 @@
+# input: time
+# iq_mode: freq
+# time_shift: -82
+# freq_shift: 0
+# update_time: 25
+# frames: 500
 real,imag
 -1.2847328e-07,-3.1643583e-07
 -3.8433389e-07,2.1169716e-07
