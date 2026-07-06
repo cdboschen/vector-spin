@@ -848,43 +848,16 @@ function render(){
   // vice-versa), so tips are red in Time mode / blue in Freq mode. Origin stays green.
   const tipColor = (vs.iq_mode==='time') ? vs.fmarker[0] : vs.tmarker[0];
   const cX = anim.chainX, cY = anim.chainY;
-  // Drawing-only cleanup for near-zero phasors (e.g. the Pi-Filter's dozens of
-  // tiny end taps), whose full-width shafts and full-size tip dots otherwise pile
-  // onto one spot and shimmer as the phase ramp spins them ("sparks"). The math is
-  // untouched; phasors longer than a few pixels render exactly as before.
-  //  - shaft polyline: collapse vertices until the chain has moved >= 1px (keep)
-  //  - tip dots: radius scaled to the phasor's own pixel length — full size from
-  //    ~7px, shrinking below, gone under ~1px; a dot much larger than its phasor
-  //    just stacks on its neighbours as flickering clutter
-  // The final tip (the reconstruction point being traced) always draws full size.
-  const keep = [0], tips = [];
-  if(cX.length > 1){
-    let lx = iq.X(cX[0]), ly = iq.Y(cY[0]);      // last kept shaft vertex
-    let px = lx, py = ly;                        // previous vertex
-    for(let i=1;i<cX.length;i++){
-      const x = iq.X(cX[i]), y = iq.Y(cY[i]);
-      const last = (i === cX.length-1);
-      if(last || Math.hypot(x-lx, y-ly) >= 1){ keep.push(i); lx=x; ly=y; }
-      const r = last ? 3.15 : Math.min(3.15, 0.45*Math.hypot(x-px, y-py));
-      if(r >= 0.5) tips.push([i, r]);
-      px=x; py=y;
-    }
-  }
   if(highlightIndex==null){
-    drawLine(iq, keep.map(i=>cX[i]), keep.map(i=>cY[i]), vs.phasor_color, 2.8); // shafts match stem width
-    for(const [i,r] of tips) drawDots(iq, [cX[i]], [cY[i]], tipColor, r);       // tips: source-domain colour
+    drawLine(iq, cX, cY, vs.phasor_color, 2.8);                    // phasor shafts match stem width
+    drawDots(iq, cX.slice(1), cY.slice(1), tipColor, 3.15);        // tips: source-domain colour
   } else {
-    // Spotlight: dim every phasor span/tip except the selected index k, drawn last
-    // (on top). Dim spans/dots follow the same cleanup; the selected always draws.
+    // Spotlight: dim every phasor segment/tip except the selected index k, drawn last (on top).
     const k = highlightIndex;
-    for(let s=0;s<keep.length-1;s++){
-      const a = keep[s], b = keep[s+1];
-      if(k>=a && k<b) continue;                    // span holding the selected phasor
-      drawLine(iq, [cX[a],cX[b]], [cY[a],cY[b]], DIM, 2.8);
-    }
-    for(const [i,r] of tips){
-      if(i === k+1) continue;                      // selected phasor's tip, drawn below
-      drawDots(iq, [cX[i]], [cY[i]], DIM, r);
+    for(let s=0;s<cX.length-1;s++){
+      if(s===k) continue;
+      drawLine(iq, [cX[s],cX[s+1]], [cY[s],cY[s+1]], DIM, 2.8);
+      drawDots(iq, [cX[s+1]], [cY[s+1]], DIM, 3.15);
     }
     if(k>=0 && k<cX.length-1){
       drawLine(iq, [cX[k],cX[k+1]], [cY[k],cY[k+1]], vs.phasor_color, 3.8);
