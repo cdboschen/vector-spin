@@ -1,3 +1,9 @@
+# input: time
+# iq_mode: time
+# time_shift: 0
+# freq_shift: -12
+# update_time: 50
+# frames: 300
 real,imag
 3.0,0.0
 0.649519,-0.75
