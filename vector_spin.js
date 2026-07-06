@@ -1538,6 +1538,8 @@ el('vs-upload-file').addEventListener('change', e=>{
 // Downloadable sample CSVs. To offer another, drop a file in samples/ and add an
 // entry here — the list below is built from this array.
 const SAMPLES = [
+  { file:'samples/moving_avg_5.csv',         label:'5-sample Moving Avg Filter', note:'5 taps · all ones' },
+  { file:'samples/dft_6.csv',                label:'6-sample DFT',               note:'6 complex time samples' },
   { file:'samples/halfband_17_kaiser12.csv', label:'Half-band low-pass filter', note:'17 taps · Kaiser β=12' },
   { file:'samples/hilbert_31_kaiser8.csv',   label:'Hilbert transformer',        note:'31 taps · 2/n · Kaiser β=8' },
   { file:'samples/fft_vector_spin.csv',      label:'Clock face',                 note:'the original “eye” · 5 bins · spins clockwise' },

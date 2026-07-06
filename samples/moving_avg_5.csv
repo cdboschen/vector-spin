@@ -1,0 +1,12 @@
+# input: time
+# iq_mode: freq
+# time_shift: 0
+# freq_shift: 0
+# update_time: 25
+# frames: 300
+real,imag
+1,0
+1,0
+1,0
+1,0
+1,0
