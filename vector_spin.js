@@ -11,7 +11,27 @@ const cmul  = (a,b) => C(a.re*b.re - a.im*b.im, a.re*b.im + a.im*b.re);
 const cscale= (a,s) => C(a.re*s, a.im*s);
 const cexpj = (t)   => C(Math.cos(t), Math.sin(t));   // e^{j t}
 const cabs  = (a)   => Math.hypot(a.re, a.im);
-const cang  = (a)   => Math.atan2(a.im, a.re);
+// Phase wraps at +179° / -181° instead of ±180°: a real signal's 180° phase,
+// which numerical noise flips between +π and -π, then always lands at -180°.
+const PHASE_WRAP_HI = Math.PI - Math.PI/180;
+const wrapPhase = (t) => (t > PHASE_WRAP_HI ? t - TAU : t);
+// |sample| at or below this is numerically zero, so its phase is undefined:
+// the phase plots show it as a gray dot at 0.
+const PHASE_ZERO_EPS = 1e-15;
+// Same idea for the dense "ideal" curves, but relative to the curve's peak so
+// it absorbs FFT round-off (~N·eps·peak, well above 1e-15 for 300-point sums).
+const PHASE_ZERO_REL = 1e-12;
+// Phase plots span slightly past ±π so content at -180° (the default for real
+// signals after the wrap above) sits visibly inside the plot, not on its border.
+const PHASE_YLIM = [-Math.PI-0.25, Math.PI+0.25];
+const cang  = (a)   => wrapPhase(Math.atan2(a.im, a.re));
+// Ideal-curve phase: zero-crossing points whose magnitude is pure round-off
+// have undefined phase — blank them to NaN so drawLine lifts the pen there
+// instead of drawing a noise spike through them.
+function idealPhase(res, mag){
+  const eps = Math.max(...mag) * PHASE_ZERO_REL;
+  return res.map((v,i)=> mag[i] <= eps ? NaN : cang(v));
+}
 
 // Generic O(N^2) DFT / IDFT (N is small for teaching inputs).
 function dft(x){
@@ -193,18 +213,22 @@ function computePlotData(){
 
   // --- time domain markers ---
   const tindex = []; for(let k=0;k<N;k++) tindex.push(k + vs.tshift);
-  const tmag = absArr(vs.tvalues), tph = angArr(vs.tvalues);
+  const tmag = absArr(vs.tvalues);
+  const tphUndef = tmag.map(m => m <= PHASE_ZERO_EPS);
+  const tph = angArr(vs.tvalues).map((p,k)=> tphUndef[k] ? 0 : p);
 
   // --- freq domain markers ---
   const findex = []; for(let k=0;k<N;k++) findex.push(k + vs.fshift);
-  const fmag = absArr(vs.fvalues), fph = angArr(vs.fvalues);
+  const fmag = absArr(vs.fvalues);
+  const fphUndef = fmag.map(m => m <= PHASE_ZERO_EPS);
+  const fph = angArr(vs.fvalues).map((p,k)=> fphUndef[k] ? 0 : p);
 
   const data = {
     N, nsamps,
-    time: { index:tindex, mag:tmag, ph:tph, marker:vs.tmarker,
+    time: { index:tindex, mag:tmag, ph:tph, phUndef:tphUndef, marker:vs.tmarker,
             stems:(vs.iq_mode==='freq'), ideal:null,
             xlim:[vs.tshift-0.2, vs.tshift+N+0.2], magYlim:[0, 1.2*Math.max(...tmag,1e-9)] },
-    freq: { index:findex, mag:fmag, ph:fph, marker:vs.fmarker,
+    freq: { index:findex, mag:fmag, ph:fph, phUndef:fphUndef, marker:vs.fmarker,
             stems:(vs.iq_mode==='time'), ideal:null,
             xlim:[vs.fshift-0.2, vs.fshift+N+0.2], magYlim:[0, 1.2*Math.max(...fmag,1e-9)] },
     iq: { marker:(vs.iq_mode==='time'?vs.tmarker:vs.fmarker),
@@ -219,7 +243,8 @@ function computePlotData(){
                 .map((v,n)=> cmul(v, cexpj(vs.fshift*TAU*n/nsamps)));
     if(vs.input_mode==='freq') res = scaleArr(res, 1/N);
     const xax = linspace(vs.tshift, vs.tshift+N, nsamps);
-    data.time.ideal = { x:xax, mag:absArr(res), ph:angArr(res) };
+    const imag = absArr(res);
+    data.time.ideal = { x:xax, mag:imag, ph:idealPhase(res, imag) };
     data.time.magYlim = [0, 1.2*Math.max(maxAbs(res),1e-9)];
   }
 
@@ -230,7 +255,8 @@ function computePlotData(){
                 .map((v,n)=> cmul(v, cexpj(-vs.tshift*TAU*n/nsamps)));
     if(vs.input_mode==='time') res = scaleArr(res, 1/N);
     const xax = linspace(vs.fshift, vs.fshift+N, nsamps);
-    data.freq.ideal = { x:xax, mag:absArr(res), ph:angArr(res) };
+    const imag = absArr(res);
+    data.freq.ideal = { x:xax, mag:imag, ph:idealPhase(res, imag) };
     data.freq.magYlim = [0, 1.2*Math.max(maxAbs(res),1e-9)];
   }
 
@@ -325,7 +351,7 @@ function step(){
   anim.histX.push(x);  anim.histY.push(y);
   anim.histTx.push(sampleIndex);
   anim.histMag.push(Math.hypot(x,y));
-  anim.histPh.push(Math.atan2(y,x));
+  anim.histPh.push(Math.hypot(x,y) <= PHASE_ZERO_EPS ? 0 : wrapPhase(Math.atan2(y,x)));
   while(anim.histX.length > anim.maxHist){
     anim.histX.shift(); anim.histY.shift(); anim.histTx.shift();
     anim.histMag.shift(); anim.histPh.shift();
@@ -633,9 +659,11 @@ function drawStems(mp, xs, ys, color, mColor, mSize, hi){
 function drawLine(mp, xs, ys, color, w){
   ctx.strokeStyle = color; ctx.lineWidth = w;
   ctx.beginPath();
+  let pen = false;   // NaN (undefined phase at a zero crossing) lifts the pen
   for(let i=0;i<xs.length;i++){
+    if(!Number.isFinite(ys[i])){ pen = false; continue; }
     const px=mp.X(xs[i]), py=mp.Y(ys[i]);
-    if(i===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+    if(pen) ctx.lineTo(px,py); else { ctx.moveTo(px,py); pen = true; }
   }
   ctx.stroke();
 }
@@ -649,7 +677,7 @@ function drawDots(mp, xs, ys, color, r){
 function drawStripPlot(name, side, isMag){
   const rect = rects[name];
   const d = PD[side];
-  const ylim = isMag ? d.magYlim : [-Math.PI, Math.PI];
+  const ylim = isMag ? d.magYlim : PHASE_YLIM;
   // On the narrow stacked (phone) layout, shorten "Magnitude" so the title fits
   // the small strip charts; desktop keeps the full word.
   const magWord = layoutMode==='stacked' ? 'Mag' : 'Magnitude';
@@ -668,6 +696,14 @@ function drawStripPlot(name, side, isMag){
   // (a source-domain array index) selects the right impulse.
   if(d.stems){ drawStems(mp, d.index, yvals, vs.phasor_color, d.marker[0], d.marker[1], highlightIndex); }
   else { drawMarkers(mp, d.index, yvals, d.marker[0], d.marker[1]); }
+  // numerically-zero samples have undefined phase: overdraw a gray dot at 0
+  if(!isMag){
+    for(let i=0;i<d.index.length;i++){
+      if(!d.phUndef[i]) continue;
+      const sz = (d.stems && i===highlightIndex) ? d.marker[1]*1.5 : d.marker[1];
+      drawMarkers(mp, [d.index[i]], [0], '#808080', sz);
+    }
+  }
   unclip();
 }
 
@@ -815,9 +851,9 @@ function render(){
     const magWord = layoutMode==='stacked' ? 'Mag' : 'Magnitude';
     ctx = stripCtx;
     mappers.time_mag  = makeMapper(rects.time_mag,  [0,1],[0,1], {title:'Time-Domain: '+magWord});
-    mappers.time_phase= makeMapper(rects.time_phase,[0,1],[-Math.PI,Math.PI], {title:'Time-Domain: Phase', xlabel:'Time Index n', ylabel:'Radians'});
+    mappers.time_phase= makeMapper(rects.time_phase,[0,1],PHASE_YLIM, {title:'Time-Domain: Phase', xlabel:'Time Index n', ylabel:'Radians'});
     mappers.freq_mag  = makeMapper(rects.freq_mag,  [0,1],[0,1], {title:'Freq-Domain: '+magWord});
-    mappers.freq_phase= makeMapper(rects.freq_phase,[0,1],[-Math.PI,Math.PI], {title:'Freq-Domain: Phase', xlabel:'Frequency Index k', ylabel:'Radians'});
+    mappers.freq_phase= makeMapper(rects.freq_phase,[0,1],PHASE_YLIM, {title:'Freq-Domain: Phase', xlabel:'Frequency Index k', ylabel:'Radians'});
     drawAxes(mappers.time_mag); drawAxes(mappers.time_phase);
     drawAxes(mappers.freq_mag); drawAxes(mappers.freq_phase);
     ctx = ctx1;

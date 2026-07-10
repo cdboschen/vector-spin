@@ -50,6 +50,34 @@ except ImportError:
 
 mlib.use("Qt5Agg")
 
+# Phase wraps at +179° / -181° instead of ±180°: a real signal's 180° phase,
+# which numerical noise flips between +pi and -pi, then always lands at -180°.
+PHASE_WRAP_HI = np.pi - np.pi / 180
+# |sample| at or below this is numerically zero, so its phase is undefined:
+# the phase plots show it as a gray dot at 0.
+PHASE_ZERO_EPS = 1e-15
+# Same idea for the dense "ideal" curves, but relative to the curve's peak so
+# it absorbs FFT round-off (~N·eps·peak, well above 1e-15 for 300-point sums).
+PHASE_ZERO_REL = 1e-12
+# Phase plots span slightly past ±pi so content at -180° (the default for real
+# signals after the wrap above) sits visibly inside the plot, not on its border.
+PHASE_YLIM = (-np.pi - 0.25, np.pi + 0.25)
+
+
+def wrap_phase(ph):
+    """Wrap angle(s) in radians into (-181°, +179°] instead of (-180°, +180°]."""
+    return np.where(ph > PHASE_WRAP_HI, ph - 2 * np.pi, ph)
+
+
+def curve_phase(values):
+    """Phase of a dense ideal curve. Zero-crossing points whose magnitude is
+    pure round-off have undefined phase — blank them to NaN so the plotted
+    line breaks there instead of spiking through a noise angle."""
+    mag = np.abs(values)
+    ph = np.asarray(wrap_phase(np.angle(values)), dtype=float)
+    ph[mag <= mag.max() * PHASE_ZERO_REL] = np.nan
+    return ph
+
 
 class MyRadioButtons(widg.RadioButtons):
 
@@ -243,10 +271,13 @@ class VectorSpin():
             self.time_mag.set_xlim((-.2 + tindex[0], .2 + tindex[-1] + 1))
             self.time_mag.set_ylim((0, 1.2 * np.max(np.abs(self.tvalues))))
             self.time_phase.set_xlim((-.2 + tindex[0], .2 + tindex[-1] + 1))
-            self.time_phase.set_ylim((-np.pi, np.pi))
+            self.time_phase.set_ylim(PHASE_YLIM)
+
+            tzero = np.abs(self.tvalues) <= PHASE_ZERO_EPS
+            tph = np.where(tzero, 0.0, wrap_phase(np.angle(self.tvalues)))
 
             self.time_mag.plot(tindex, np.abs(self.tvalues), self.tmarker[0], markersize=self.tmarker[1])
-            self.time_phase.plot(tindex, np.angle(self.tvalues), self.tmarker[0], markersize=self.tmarker[1])
+            self.time_phase.plot(tindex, tph, self.tmarker[0], markersize=self.tmarker[1])
 
             if self.iq_mode == 'freq':
                 markerline, stemline, baseline = self.time_mag.stem(tindex, np.abs(self.tvalues),
@@ -255,7 +286,7 @@ class VectorSpin():
                 plt.setp(markerline, markersize=self.tmarker[1])
                 plt.setp(stemline, color=self.phasor_color)
                 plt.setp(baseline, color='black')
-                markerline, stemline, baseline = self.time_phase.stem(tindex, np.angle(self.tvalues),
+                markerline, stemline, baseline = self.time_phase.stem(tindex, tph,
                                                                        markerfmt=self.tmarker[0],
                                                                        basefmt='')
                 plt.setp(markerline, markersize=self.tmarker[1])
@@ -271,9 +302,14 @@ class VectorSpin():
                     result = result / N
                 self.time_mag.set_ylim((0, 1.2 * np.max(np.abs(result))))
                 self.time_mag.plot(x_axis, np.abs(result), 'r', linewidth=0.3)
-                self.time_phase.plot(x_axis, np.angle(result), 'r', linewidth=0.3)
+                self.time_phase.plot(x_axis, curve_phase(result), 'r', linewidth=0.3)
                 self.mag, = self.time_mag.plot([], [], color=self.history_color, marker='.', linestyle='', ms=1)
                 self.ph, = self.time_phase.plot([], [], color=self.history_color, marker='.', linestyle='', ms=1)
+
+            # numerically-zero samples have undefined phase: overdraw a gray dot at 0
+            if np.any(tzero):
+                self.time_phase.plot(tindex[tzero], np.zeros(np.count_nonzero(tzero)),
+                                     'o', color='gray', markersize=self.tmarker[1])
 
     def plot_freq(self):
         self.freq_mag.clear()
@@ -292,9 +328,12 @@ class VectorSpin():
             self.freq_mag.set_xlim((-.2 + findex[0], +0.2 + findex[-1] + 1))
             self.freq_mag.set_ylim((0, 1.2 * np.max(np.abs(self.fvalues))))
             self.freq_phase.set_xlim((-.2 + findex[0], +0.2 + findex[-1] + 1))
-            self.freq_phase.set_ylim((-np.pi, np.pi))
+            self.freq_phase.set_ylim(PHASE_YLIM)
+            fzero = np.abs(self.fvalues) <= PHASE_ZERO_EPS
+            fph = np.where(fzero, 0.0, wrap_phase(np.angle(self.fvalues)))
+
             self.freq_mag.plot(findex, np.abs(self.fvalues), self.fmarker[0], markersize=self.fmarker[1])
-            self.freq_phase.plot(findex, np.angle(self.fvalues), self.fmarker[0], markersize=self.fmarker[1])
+            self.freq_phase.plot(findex, fph, self.fmarker[0], markersize=self.fmarker[1])
 
             if self.iq_mode == 'time':
                 markerline, stemline, baseline = self.freq_mag.stem(findex, np.abs(self.fvalues),
@@ -303,7 +342,7 @@ class VectorSpin():
                 plt.setp(markerline, markersize=self.fmarker[1])
                 plt.setp(stemline, color=self.phasor_color)
                 plt.setp(baseline, color='black')
-                markerline, stemline, baseline = self.freq_phase.stem(findex, np.angle(self.fvalues),
+                markerline, stemline, baseline = self.freq_phase.stem(findex, fph,
                                                                        markerfmt=self.fmarker[0],
                                                                        basefmt='')
                 plt.setp(markerline, markersize=self.fmarker[1])
@@ -319,9 +358,14 @@ class VectorSpin():
                     result = result / N
                 self.freq_mag.set_ylim((0, 1.2 * np.max(np.abs(result))))
                 self.freq_mag.plot(x_axis, np.abs(result), 'r', linewidth=0.3)
-                self.freq_phase.plot(x_axis, np.angle(result), 'r', linewidth=0.3)
+                self.freq_phase.plot(x_axis, curve_phase(result), 'r', linewidth=0.3)
                 self.mag, = self.freq_mag.plot([], [], color=self.history_color, marker='.', linestyle='', ms=1)
                 self.ph, = self.freq_phase.plot([], [], color=self.history_color, marker='.', linestyle='', ms=1)
+
+            # numerically-zero samples have undefined phase: overdraw a gray dot at 0
+            if np.any(fzero):
+                self.freq_phase.plot(findex[fzero], np.zeros(np.count_nonzero(fzero)),
+                                     'o', color='gray', markersize=self.fmarker[1])
 
     def plot_iq(self):
         for artist in self.iq.lines:
@@ -479,8 +523,10 @@ class VectorSpin():
             else:
                 sample_index = np.abs(phase) * (len(self.current_phasors)) / (2 * np.pi) + self.fshift
             self.history_tx.appendleft(sample_index)
-            self.history_mag.appendleft(np.abs(x + 1j * y))
-            self.history_ph.appendleft(np.arctan2(y, x))
+            mag = np.abs(x + 1j * y)
+            self.history_mag.appendleft(mag)
+            self.history_ph.appendleft(0.0 if mag <= PHASE_ZERO_EPS
+                                       else float(wrap_phase(np.arctan2(y, x))))
             self.line.set_data(xs, ys)
             self.trace.set_data(self.history_x, self.history_y)
             self.mag.set_data(self.history_tx, self.history_mag)
