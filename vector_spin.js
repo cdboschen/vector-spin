@@ -166,17 +166,21 @@ const vs = {
   get fmarker(){ return this.input_mode==='time' ? this.result_marker : this.input_marker; },
 };
 
+// Shifts move in 0.5 steps. Only the integer part can circularly roll the
+// array; the half-sample remainder is phase-only — it rides in the linear
+// phase ramp below (applied to the complex values, so the phase wrap and
+// gray undefined-dots logic then see the final result). The ramp exponent
+// uses each slot's displayed index (k + other-domain shift, unwrapped) so
+// samples, ideal curves, and the animation all share the same convention.
 function computeFvalues(){
   const N = vs.tvalues.length; if(!N) return;
-  let F = dft(vs.tvalues);
-  F = F.map((v,k)=> cmul(cscale(v, 1/N), cexpj(-vs.tshift*TAU*k/N)));
-  vs.fvalues = roll(F, -vs.fshift);
+  const F = roll(dft(vs.tvalues), -Math.trunc(vs.fshift));
+  vs.fvalues = F.map((v,k)=> cmul(cscale(v, 1/N), cexpj(-vs.tshift*TAU*(k+vs.fshift)/N)));
 }
 function computeTvalues(){
   const N = vs.fvalues.length; if(!N) return;
-  let T = idft(vs.fvalues);
-  T = T.map((v,k)=> cmul(v, cexpj(vs.fshift*TAU*k/N)));
-  vs.tvalues = roll(T, -vs.tshift);
+  const T = roll(idft(vs.fvalues), -Math.trunc(vs.tshift));
+  vs.tvalues = T.map((v,k)=> cmul(v, cexpj(vs.fshift*TAU*(k+vs.tshift)/N)));
 }
 
 // ---- Plot data cache (recomputed on state change, not per frame) ----
@@ -238,7 +242,7 @@ function computePlotData(){
 
   // --- smooth "ideal" curve for the time plots (only when iq_mode == time) ---
   if(vs.iq_mode==='time'){
-    const tsf = vs.fvalues.map((v,k)=> cmul(v, cexpj(vs.tshift*TAU*((k+vs.fshift)%N)/N)));
+    const tsf = vs.fvalues.map((v,k)=> cmul(v, cexpj(vs.tshift*TAU*(k+vs.fshift)/N)));
     let res = ifftPad(scaleArr(tsf, nsamps), nsamps)
                 .map((v,n)=> cmul(v, cexpj(vs.fshift*TAU*n/nsamps)));
     if(vs.input_mode==='freq') res = scaleArr(res, 1/N);
@@ -250,7 +254,7 @@ function computePlotData(){
 
   // --- smooth "ideal" curve for the freq plots (only when iq_mode == freq) ---
   if(vs.iq_mode==='freq'){
-    const fst = vs.tvalues.map((v,k)=> cmul(v, cexpj(-vs.fshift*TAU*((k+vs.tshift)%N)/N)));
+    const fst = vs.tvalues.map((v,k)=> cmul(v, cexpj(-vs.fshift*TAU*(k+vs.tshift)/N)));
     let res = fftPad(scaleArr(fst, nsamps), nsamps).map(v=> cscale(v, 1/nsamps))
                 .map((v,n)=> cmul(v, cexpj(-vs.tshift*TAU*n/nsamps)));
     if(vs.input_mode==='time') res = scaleArr(res, 1/N);
@@ -658,6 +662,10 @@ function drawStems(mp, xs, ys, color, mColor, mSize, hi){
 }
 function drawLine(mp, xs, ys, color, w){
   ctx.strokeStyle = color; ctx.lineWidth = w;
+  // Round joins: the default miter join extrudes a spike out of any near-180°
+  // fold (e.g. a phasor doubling back over the previous one), popping in/out
+  // frame to frame as the miter limit trips. Matches Matplotlib's default.
+  ctx.lineJoin = 'round'; ctx.lineCap = 'round';
   ctx.beginPath();
   let pen = false;   // NaN (undefined phase at a zero crossing) lifts the pen
   for(let i=0;i<xs.length;i++){
@@ -1367,6 +1375,7 @@ function refreshPlots(){
   computePlotData();
   armAnimation();
   render();
+  updatePermalink();   // keep the URL hash mirroring the configuration
 }
 
 function applyInput(){
@@ -1432,8 +1441,8 @@ function applyCsvSettings(s){
     for(const r of document.querySelectorAll('input[name="iqmode"]'))
       r.checked = (r.value === s.iq_mode);
   }
-  if(s.tshift !== undefined){ vs.tshift = Math.round(s.tshift); }
-  if(s.fshift !== undefined){ vs.fshift = Math.round(s.fshift); }
+  if(s.tshift !== undefined){ vs.tshift = Math.round(s.tshift*2)/2; }
+  if(s.fshift !== undefined){ vs.fshift = Math.round(s.fshift*2)/2; }
   updateShiftLabels();
   if(s.refresh !== undefined){
     vs.refresh = Math.min(500, Math.max(10, Math.round(s.refresh)));
@@ -1444,6 +1453,103 @@ function applyCsvSettings(s){
     el('vs-frames').value = vs.nsamps; el('vs-frames-val').textContent = vs.nsamps;
   }
 }
+
+// ---- Permalinks: the URL hash mirrors the full configuration -------------
+// Same keys a CSV can carry, plus "time=" / "freq=" which hold the input array
+// AND select its domain, e.g. #time=[1,1,1,1,1]&iq_mode=freq&update_time=25
+// Values may be hand-typed (literal "+", brackets and commas are fine in a
+// fragment) or percent-encoded — both parse. Omitted keys keep their defaults.
+function parseHashConfig(hash){
+  if(!hash || hash === '#') return null;
+  const out = { settings: {}, array: null };
+  let any = false;
+  for(const part of hash.replace(/^#/, '').split('&')){
+    const eq = part.indexOf('=');
+    if(eq < 0) continue;
+    const key = part.slice(0, eq).trim().toLowerCase().replace(/ +/g, '_');
+    let val = part.slice(eq + 1).trim();
+    try{ val = decodeURIComponent(val); }catch(e){ /* stray % -> keep raw */ }
+    if(!val) continue;
+    if(key === 'time' || key === 'freq'){        // the array + its domain in one key
+      out.settings.input_mode = key; out.array = val; any = true; continue;
+    }
+    const canon = CSV_SETTING_KEYS[key];
+    if(!canon) continue;                          // unknown key -> ignore
+    if(canon === 'input_mode' || canon === 'iq_mode'){
+      const v = val.toLowerCase();
+      if(v === 'time' || v === 'freq'){ out.settings[canon] = v; any = true; }
+    } else {
+      const n = Number(val);
+      if(Number.isFinite(n)){ out.settings[canon] = n; any = true; }
+    }
+  }
+  return any ? out : null;
+}
+
+// Percent-encode the array text, then restore the characters that read well in
+// a URL and are unambiguous in our own hash grammar (we split only on & and =).
+function encodeHashArray(txt){
+  return encodeURIComponent(txt)
+    .replace(/%2C/gi, ',').replace(/%5B/gi, '[').replace(/%5D/gi, ']')
+    .replace(/%2B/gi, '+');
+}
+
+// Settings still at their startup defaults stay out of the hash, so permalinks
+// carry only what the user changed.
+const HASH_DEFAULTS = { refresh: vs.refresh, nsamps: vs.nsamps };
+
+function buildPermalinkHash(){
+  const txt = inputEl.value.replace(/\s+/g, '');
+  const parts = [];
+  if(txt && !inputEl.classList.contains('vs-error'))
+    parts.push((vs.input_mode === 'freq' ? 'freq=' : 'time=') + encodeHashArray(txt));
+  if(vs.iq_mode !== 'time')                 parts.push('iq_mode=' + vs.iq_mode);
+  if(vs.tshift)                             parts.push('time_shift=' + vs.tshift);
+  if(vs.fshift)                             parts.push('freq_shift=' + vs.fshift);
+  if(vs.refresh !== HASH_DEFAULTS.refresh)  parts.push('update_time=' + vs.refresh);
+  if(vs.nsamps !== HASH_DEFAULTS.nsamps)    parts.push('frames=' + vs.nsamps);
+  return parts.join('&');
+}
+
+function permalinkUrl(){
+  const h = buildPermalinkHash();
+  return location.href.split('#')[0] + (h ? '#' + h : '');
+}
+
+// Mirror the configuration into the address bar. Debounced — Safari rate-limits
+// history.replaceState — and off until the initial load settles, so a plain
+// visit keeps a clean URL until the user changes something.
+let permalinkLive = false, _permalinkTimer = 0;
+function updatePermalink(){
+  if(!permalinkLive || !window.history || !history.replaceState) return;
+  clearTimeout(_permalinkTimer);
+  _permalinkTimer = setTimeout(()=>{
+    const h = buildPermalinkHash();
+    try{ history.replaceState(null, '', location.pathname + location.search + (h ? '#' + h : '')); }
+    catch(e){ /* rate-limited or sandboxed iframe -> Copy Link still works */ }
+  }, 250);
+}
+
+// Apply the configuration in location.hash, if any. Returns true if applied.
+// A permalink is a complete state: builders omit at-default settings, so keys
+// the hash lacks reset to their defaults here (CSV presets, by contrast, leave
+// omitted settings untouched).
+function applyHashConfig(){
+  const cfg = parseHashConfig(location.hash);
+  if(!cfg) return false;
+  applyCsvSettings(Object.assign(
+    { iq_mode:'time', tshift:0, fshift:0,
+      refresh:HASH_DEFAULTS.refresh, frames:HASH_DEFAULTS.nsamps },
+    cfg.settings));
+  if(cfg.array != null){
+    try{ parseInput(cfg.array); inputEl.value = cfg.array; }
+    catch(e){ /* malformed array in the link -> keep the current array */ }
+  }
+  applyInput();
+  return true;
+}
+// replaceState never fires this, so it only reacts to a hash pasted/edited by hand.
+window.addEventListener('hashchange', applyHashConfig);
 
 // Parse a two-column (real, imag) CSV into an array of complex samples plus any
 // "# key: value" settings. Throws with a human-readable reason on any format
@@ -1538,13 +1644,16 @@ el('vs-upload-btn').addEventListener('click', ()=>
 el('vs-samples-btn').addEventListener('click', ()=>
   togglePanel(el('vs-samples-panel'), closeUploadPanel, el('vs-samples-msg')));
 
-// Clicking anywhere outside the open Examples panel (and not on its toggle button)
-// collapses it — a user who decides not to explore the samples just clicks away.
-document.addEventListener('click', (e)=>{
-  const panel = el('vs-samples-panel'), btn = el('vs-samples-btn');
+// Clicking anywhere outside an open panel (and not on its toggle button)
+// collapses it — a user who decides not to upload / explore just clicks away.
+function closeOnOutsideClick(e, panel, btn, close){
   if(!panel || panel.style.display === 'none' || !panel.style.display) return;
   if(panel.contains(e.target) || (btn && btn.contains(e.target))) return;
-  closeSamplesPanel();
+  close();
+}
+document.addEventListener('click', (e)=>{
+  closeOnOutsideClick(e, el('vs-samples-panel'), el('vs-samples-btn'), closeSamplesPanel);
+  closeOnOutsideClick(e, el('vs-upload-panel'), el('vs-upload-btn'), closeUploadPanel);
 });
 
 el('vs-upload-file').addEventListener('change', e=>{
@@ -1624,16 +1733,18 @@ for(const r of document.querySelectorAll('input[name="inputmode"]'))
 for(const r of document.querySelectorAll('input[name="iqmode"]'))
   r.addEventListener('change', e=> setIqMode(e.target.value));
 
-el('vs-tplus').addEventListener('click', ()=> setTshift(vs.tshift+1));
-el('vs-tminus').addEventListener('click',()=> setTshift(vs.tshift-1));
-el('vs-fplus').addEventListener('click', ()=> setFshift(vs.fshift+1));
-el('vs-fminus').addEventListener('click',()=> setFshift(vs.fshift-1));
+el('vs-tplus').addEventListener('click', ()=> setTshift(vs.tshift+0.5));
+el('vs-tminus').addEventListener('click',()=> setTshift(vs.tshift-0.5));
+el('vs-fplus').addEventListener('click', ()=> setFshift(vs.fshift+0.5));
+el('vs-fminus').addEventListener('click',()=> setFshift(vs.fshift-0.5));
 // typed shift values (e.g. -82 to centre a 165-tap filter's taps)
-el('vs-tshift-lbl').addEventListener('change', e=>{ const v=parseInt(e.target.value,10); if(Number.isFinite(v)) setTshift(v); else updateShiftLabels(); });
-el('vs-fshift-lbl').addEventListener('change', e=>{ const v=parseInt(e.target.value,10); if(Number.isFinite(v)) setFshift(v); else updateShiftLabels(); });
+// typed values snap to the 0.5 grid
+el('vs-tshift-lbl').addEventListener('change', e=>{ const v=parseFloat(e.target.value); if(Number.isFinite(v)) setTshift(Math.round(v*2)/2); else updateShiftLabels(); });
+el('vs-fshift-lbl').addEventListener('change', e=>{ const v=parseFloat(e.target.value); if(Number.isFinite(v)) setFshift(Math.round(v*2)/2); else updateShiftLabels(); });
 
 el('vs-time').addEventListener('input', e=>{
   vs.refresh = +e.target.value; el('vs-time-val').textContent = e.target.value;
+  updatePermalink();   // doesn't redraw, so refreshPlots() won't mirror this one
 });
 el('vs-frames').addEventListener('input', e=>{
   vs.nsamps = +e.target.value; el('vs-frames-val').textContent = e.target.value;
@@ -1645,6 +1756,24 @@ el('vs-startstop').addEventListener('click', ()=>{
 });
 el('vs-savegif').addEventListener('click', saveGif);
 el('vs-savemp4').addEventListener('click', saveMp4);
+el('vs-copylink').addEventListener('click', ()=>{
+  const btn = el('vs-copylink'), url = permalinkUrl();
+  const done = ok => {
+    btn.textContent = ok ? 'Copied!' : 'Copy failed'; btn.disabled = true;
+    setTimeout(()=>{ btn.textContent = 'Copy Link'; btn.disabled = false; }, 1400);
+  };
+  const fallback = ()=>{               // execCommand path (http://, older browsers)
+    const ta = document.createElement('textarea');
+    ta.value = url; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    let ok = false; try{ ok = document.execCommand('copy'); }catch(e){}
+    ta.remove(); return ok;
+  };
+  updatePermalink();                   // the address bar matches what was copied
+  if(navigator.clipboard && navigator.clipboard.writeText)
+    navigator.clipboard.writeText(url).then(()=>done(true), ()=>done(fallback()));
+  else done(fallback());
+});
 el('vs-clear').addEventListener('click', ()=>{
   stopAnim();
   vs.tvalues=[]; vs.fvalues=[]; vs.tshift=0; vs.fshift=0;
@@ -1652,6 +1781,7 @@ el('vs-clear').addEventListener('click', ()=>{
   updateShiftLabels();
   PD=null; anim.chainX=[0]; anim.chainY=[0]; clearHistory(); highlightIndex=null; pinnedHighlight=null;
   render();
+  updatePermalink();   // empty state -> drops the hash from the URL
 });
 
 // Responsive relayout: switch between the wide desktop layout and the stacked
@@ -1738,7 +1868,8 @@ document.addEventListener('click', e=>{
 
 // initial state
 updateShiftLabels();
-applyInput();   // loads the prefilled [1, 2+3j, 3]
+if(!applyHashConfig()) applyInput();   // a #permalink overrides the prefilled [1, 2+3j, 3]
+permalinkLive = true;                  // from here on the URL mirrors every change
 
 })();
 

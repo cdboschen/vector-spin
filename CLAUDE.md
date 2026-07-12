@@ -21,6 +21,11 @@ There are two independent implementations of the same idea:
   (time|freq), `time_shift`, `freq_shift`, `update_time` (ms), `frames`; omitted keys leave the
   current setting untouched, unknown `#` lines are ignored (see `parseCsvSetting` /
   `applyCsvSettings` in the JS). Web-only; the desktop app has no CSV loader.
+  The URL hash carries **permalinks** with the same keys plus `time=`/`freq=` for the input
+  array itself (e.g. `#time=[1,1,1,1,1]&iq_mode=freq`): applied on load and on `hashchange`,
+  mirrored into the address bar on every change (debounced `history.replaceState`), and
+  copied by the Copy Link button. Unlike CSV settings, keys a permalink omits reset to
+  defaults (see `parseHashConfig` / `applyHashConfig` / `buildPermalinkHash`). Also web-only.
 - **`vector_spin.py`** — the original Matplotlib desktop app (opens a Qt window). Same model,
   rendered with Matplotlib widgets.
 

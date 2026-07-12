@@ -17,6 +17,24 @@ By [The DSP Coach](https://dsp-coach.com).
   Run `python vector_spin.py` (requires `numpy`, `scipy`, `matplotlib`, `PyQt5`, and optional
   `pyperclip`; see [`vectorspin.yml`](vectorspin.yml) for a conda environment).
 
+## Permalinks
+
+The browser app mirrors its full configuration into the URL hash, so any configuration can
+be shared as a link — the address bar updates live as you change things, and the
+**Copy Link** button copies the current permalink to the clipboard. `time=` / `freq=` carry
+the input array and select its domain; the remaining keys are the same ones the CSV settings
+use. Keys omitted from a permalink reset to their defaults when it is opened.
+
+Example — the 5-sample moving-average filter with the IQ plot showing the frequency domain:
+
+```
+vector_spin.html#time=[1,1,1,1,1]&iq_mode=freq&update_time=25
+```
+
+Supported keys: `time` / `freq` (the input array), `iq_mode` (`time`|`freq`), `time_shift`,
+`freq_shift`, `update_time` (ms), `frames`. Values may be hand-typed as above or
+percent-encoded — both parse.
+
 ## Embedding (auto-resizing iframe)
 
 `vector_spin.html` reports its content height to the parent page via `postMessage`, so a
@@ -27,6 +45,7 @@ page (e.g. a Squarespace Code Block) use:
 <iframe id="vectorspin"
         src="https://cdboschen.github.io/vector-spin/vector_spin.html"
         style="width:100%; border:0; display:block;"
+        allow="clipboard-write"
         scrolling="no"></iframe>
 <script>
   window.addEventListener('message', function(e){

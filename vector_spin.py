@@ -296,7 +296,7 @@ class VectorSpin():
                 x_axis = np.linspace(tindex[0], tindex[-1] + 1, self.nsamps, endpoint=False)
                 phase = 2 * np.pi * (np.arange(self.nsamps) / self.nsamps)
                 time_shiftf = self.fvalues * np.exp(
-                    1j * self.tshift * 2 * np.pi * np.roll(np.arange(N), -self.fshift) / N)
+                    1j * self.tshift * 2 * np.pi * (np.arange(N) + self.fshift) / N)
                 result = fft.ifft(time_shiftf * self.nsamps, self.nsamps) * np.exp(1j * self.fshift * phase)
                 if self.input_mode == 'freq':
                     result = result / N
@@ -352,7 +352,7 @@ class VectorSpin():
                 x_axis = np.linspace(findex[0], findex[-1] + 1, self.nsamps, endpoint=False)
                 phase = 2 * np.pi * (np.arange(self.nsamps) / self.nsamps)
                 freq_shiftt = self.tvalues * np.exp(
-                    -1j * self.fshift * 2 * np.pi * np.roll(np.arange(N), -self.tshift) / N)
+                    -1j * self.fshift * 2 * np.pi * (np.arange(N) + self.tshift) / N)
                 result = fft.fft(freq_shiftt * self.nsamps, self.nsamps) / self.nsamps * np.exp(-1j * self.tshift * phase)
                 if self.input_mode == 'time':
                     result = result / N
@@ -468,17 +468,23 @@ class VectorSpin():
         self.history_mag = deque(maxlen=history_len)
         self.history_ph = deque(maxlen=history_len)
 
+    # Shifts move in 0.5 steps. Only the integer part can circularly roll the
+    # array; the half-sample remainder is phase-only — it rides in the linear
+    # phase ramp below (applied to the complex values, so the phase wrap and
+    # gray undefined-dots logic then see the final result). The ramp exponent
+    # uses each slot's displayed index (k + other-domain shift, unwrapped) so
+    # samples, ideal curves, and the animation all share the same convention.
     def compute_fvalues(self):
         N = len(self.tvalues)
         if N:
-            self.fvalues = np.roll(
-                fft.fft(self.tvalues) / N * np.exp(-1j * self.tshift * 2 * np.pi * np.arange(N) / N), -self.fshift)
+            F = np.roll(fft.fft(self.tvalues) / N, -int(self.fshift))
+            self.fvalues = F * np.exp(-1j * self.tshift * 2 * np.pi * (np.arange(N) + self.fshift) / N)
 
     def compute_tvalues(self):
         N = len(self.fvalues)
         if N:
-            self.tvalues = np.roll(fft.ifft(self.fvalues) * np.exp(1j * self.fshift * 2 * np.pi * np.arange(N) / N),
-                                   -self.tshift)
+            T = np.roll(fft.ifft(self.fvalues), -int(self.tshift))
+            self.tvalues = T * np.exp(1j * self.fshift * 2 * np.pi * (np.arange(N) + self.tshift) / N)
 
     def create_ani(self):
         N = len(self.tvalues)
@@ -664,19 +670,19 @@ class SpinUI():
         self.vs.refresh_plots()
 
     def plus_time(self, event):
-        self.vs.tshift += 1
+        self.vs.tshift += 0.5
         self.vs.set_tshift(self.vs.tshift)
 
     def minus_time(self, event):
-        self.vs.tshift -= 1
+        self.vs.tshift -= 0.5
         self.vs.set_tshift(self.vs.tshift)
 
     def plus_freq(self, event):
-        self.vs.fshift += 1
+        self.vs.fshift += 0.5
         self.vs.set_fshift(self.vs.fshift)
 
     def minus_freq(self, event):
-        self.vs.fshift -= 1
+        self.vs.fshift -= 0.5
         self.vs.set_fshift(self.vs.fshift)
 
     def change_time(self, event):
